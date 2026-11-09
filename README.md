@@ -4,11 +4,11 @@ Business Esbjerg currently tracks employee leave through spreadsheets and email.
 
 ## Start here
 
-- Kyrylo drafts the API contract.
-- Azade sketches the employee and accounting screens and checks what data each needs from the API.
-- Samuele defines the role and ownership rules.
+- Kyrylo drafts the [API contract](https://github.com/azade1416/HolidayCount-KAS/issues/4).
+- Azade sketches the [employee and accounting screens](https://github.com/azade1416/HolidayCount-KAS/issues/5) and checks what data each needs from the API.
+- Samuele defines the [role and ownership rules](https://github.com/azade1416/HolidayCount-KAS/issues/6).
 
-Keep one issue in progress per person.
+Keep one issue in progress per person. Use GitHub’s Assignees field for ownership and the issue checklist for dated tasks.
 
 ## Status and first milestone
 
@@ -48,7 +48,7 @@ Start with unit tests for leave cost, account windows and effective rule dates. 
 
 ## Project board and exam evidence
 
-Track work in [GitHub Issues](https://github.com/azade1416/KAS/issues) and the [repository’s Projects tab](https://github.com/azade1416/KAS/projects). Use short branches and peer-reviewed pull requests. Add board screenshots from halfway through the project and at the end. Run Lighthouse against the same client flow before and after an improvement, then add both screenshots and describe what changed.
+Track work in [GitHub Issues](https://github.com/azade1416/HolidayCount-KAS/issues) and the [repository’s Projects tab](https://github.com/azade1416/HolidayCount-KAS/projects). Use short branches and peer-reviewed pull requests. Add board screenshots from halfway through the project and at the end. Run Lighthouse against the same client flow before and after an improvement, then add both screenshots and describe what changed.
 
 Update this README with what works, known bugs and deployment links before submitting the repository URL in WISEflow. Verify the official submission window there.
 
