@@ -71,4 +71,4 @@ After the first demo, review the remaining leave rules with Alex and agree what 
 
 ## AI disclosure
 
-We used Codex to help draft and consolidate GitHub issues, organize the Kanban, and suggest README updates. Update this section before submission with any additional AI use and identify any AI-generated files included in the submission.
+We used AI to help organize the project plan and draft issue and README text.
