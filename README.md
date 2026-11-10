@@ -56,12 +56,10 @@ Update this README with what works, known bugs and deployment links before submi
 
 | Date | Checkpoint |
 | --- | --- |
-| Moodle booking | Review the first demo scope, rule selection and accrual rounding with Alex. Use Moodle to confirm the time and attendees. |
-| 4 Dec 2026 | Aim for the hosted demo, with time left for fixes. |
-| 7 Dec 2026 | Practise the oral exam using the working flow and the code each person owns. |
-| 11 Dec 2026 | Submit the repository link only if submission is still pending and WISEflow allows it. |
-
-These are team checkpoints. Check the official dates and submission window in WISEflow.
+| 16 November 2026 | Review the first demo scope, rule selection and accrual rounding with Alex. |
+| 4 December 2026 | Aim for the hosted demo, with time left for fixes. |
+| 7 December 2026 | Practise the oral exam using the working flow and the code each person owns. |
+| 11 December 2026 | Submit the project on WISEflow. |
 
 Confirm with Alex how to round accrual, which schedule and rule version apply when hours or rules change, and which carryover, payout and exception cases need to be ready for assessment.
 
@@ -71,4 +69,4 @@ After the first demo, review the remaining leave rules with Alex and agree what 
 
 ## AI disclosure
 
-We used Codex to brainstorm ideas and think through the risks of some project decisions. We also used AI to help draft project text.
+We used Codex to brainstorm ideas and think through the risks of some project decisions.
