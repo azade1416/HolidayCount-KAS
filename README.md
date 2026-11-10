@@ -71,4 +71,4 @@ After the first demo, review the remaining leave rules with Alex and agree what 
 
 ## AI disclosure
 
-We used Codex to brainstorm ideas, think through project risks, and get feedback on the plan. It also helped us organize tasks on the Kanban board and draft wording for GitHub issues and this README. The team decides what to use and is responsible for the final work.
+We used Codex to brainstorm ideas and think through the risks of some project decisions. We also used AI to help draft project text.
