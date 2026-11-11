@@ -1,8 +1,11 @@
+using LinqToDB.Mapping;
+
 namespace Backend.Models;
 
+[Table("WorkScheduleEntries")]
 public class WorkScheduleEntry
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
     public Guid UserId { get; set; }
     public DayOfWeek DayOfWeek { get; set; }
     public decimal Hours { get; set; }

@@ -1,8 +1,11 @@
+using LinqToDB.Mapping;
+
 namespace Backend.Models;
 
+[Table("SystemParameters")]
 public class SystemParameter
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
     public string Key { get; set; } = string.Empty;
     public decimal? NumericValue { get; set; }
     public string? TextValue { get; set; }

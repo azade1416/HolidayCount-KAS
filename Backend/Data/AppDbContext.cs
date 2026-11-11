@@ -1,134 +1,67 @@
 using Backend.Models;
-using Microsoft.EntityFrameworkCore;
+using LinqToDB;
+using LinqToDB.Data;
 
 namespace Backend.Data;
 
-public class AppDbContext : DbContext
+public class AppDbContext : DataConnection
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
+    public AppDbContext(string connectionString) : base(
+        new DataOptions().UsePostgreSQL(connectionString))
     {
     }
 
-    public DbSet<User> Users => Set<User>();
-    public DbSet<WorkScheduleEntry> WorkScheduleEntries => Set<WorkScheduleEntry>();
-    public DbSet<SalaryHistory> SalaryHistory => Set<SalaryHistory>();
-    public DbSet<HolidayBalance> HolidayBalances => Set<HolidayBalance>();
-    public DbSet<MonthlyAccrual> MonthlyAccruals => Set<MonthlyAccrual>();
-    public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
-    public DbSet<HolidayTransaction> HolidayTransactions => Set<HolidayTransaction>();
-    public DbSet<SystemParameter> SystemParameters => Set<SystemParameter>();
-    public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();
+    public ITable<User> Users => this.GetTable<User>();
+    public ITable<WorkScheduleEntry> WorkScheduleEntries => this.GetTable<WorkScheduleEntry>();
+    public ITable<SalaryHistory> SalaryHistory => this.GetTable<SalaryHistory>();
+    public ITable<HolidayBalance> HolidayBalances => this.GetTable<HolidayBalance>();
+    public ITable<MonthlyAccrual> MonthlyAccruals => this.GetTable<MonthlyAccrual>();
+    public ITable<LeaveRequest> LeaveRequests => this.GetTable<LeaveRequest>();
+    public ITable<HolidayTransaction> HolidayTransactions => this.GetTable<HolidayTransaction>();
+    public ITable<SystemParameter> SystemParameters => this.GetTable<SystemParameter>();
+    public ITable<PublicHoliday> PublicHolidays => this.GetTable<PublicHoliday>();
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    public async Task EnsureSchemaAsync()
     {
-        base.OnModelCreating(modelBuilder);
-
-        modelBuilder.Entity<User>(entity =>
-        {
-            entity.Property(user => user.Fullname).HasMaxLength(200).IsRequired();
-            entity.Property(user => user.Username).HasMaxLength(100).IsRequired();
-            entity.HasIndex(user => user.Username).IsUnique();
-            entity.Property(user => user.PasswordHash).IsRequired();
-            entity.Property(user => user.Role).HasMaxLength(30).IsRequired();
-            entity.ToTable(table => table.HasCheckConstraint(
-                "CK_Users_Role",
-                "\"Role\" IN ('employee', 'accountant', 'admin')"));
-        });
-
-        modelBuilder.Entity<WorkScheduleEntry>(entity =>
-        {
-            entity.Property(schedule => schedule.Hours).HasPrecision(6, 2);
-            entity.HasIndex(schedule => new
-            {
-                schedule.UserId,
-                schedule.DayOfWeek,
-                schedule.EffectiveFrom
-            }).IsUnique();
-            entity.HasOne(schedule => schedule.User)
-                .WithMany(user => user.WorkScheduleEntries)
-                .HasForeignKey(schedule => schedule.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<SalaryHistory>(entity =>
-        {
-            entity.Property(salary => salary.MonthlySalary).HasPrecision(14, 2);
-            entity.Property(salary => salary.HourlyRate).HasPrecision(14, 2);
-            entity.Property(salary => salary.HolidayQualifyingSalary).HasPrecision(14, 2);
-            entity.HasOne(salary => salary.User)
-                .WithMany(user => user.SalaryHistory)
-                .HasForeignKey(salary => salary.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<HolidayBalance>(entity =>
-        {
-            entity.Property(balance => balance.EarnedUnits).HasPrecision(10, 3);
-            entity.Property(balance => balance.UsedUnits).HasPrecision(10, 3);
-            entity.Property(balance => balance.TransferredUnits).HasPrecision(10, 3);
-            entity.Property(balance => balance.PaidOutUnits).HasPrecision(10, 3);
-            entity.Property(balance => balance.QualifyingSalary).HasPrecision(14, 2);
-            entity.Property(balance => balance.HolidaySupplementAmount).HasPrecision(14, 2);
-            entity.HasIndex(balance => new { balance.UserId, balance.AccountType, balance.EarningYear })
-                .IsUnique();
-            entity.HasOne(balance => balance.User)
-                .WithMany(user => user.HolidayBalances)
-                .HasForeignKey(balance => balance.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<MonthlyAccrual>(entity =>
-        {
-            entity.Property(accrual => accrual.EarnedDays).HasPrecision(10, 3);
-            entity.Property(accrual => accrual.EarnedHours).HasPrecision(10, 3);
-            entity.Property(accrual => accrual.QualifyingSalary).HasPrecision(14, 2);
-            entity.HasIndex(accrual => new { accrual.HolidayBalanceId, accrual.AccrualMonth })
-                .IsUnique();
-            entity.HasOne(accrual => accrual.HolidayBalance)
-                .WithMany(balance => balance.MonthlyAccruals)
-                .HasForeignKey(accrual => accrual.HolidayBalanceId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<LeaveRequest>(entity =>
-        {
-            entity.Property(request => request.RequestedDays).HasPrecision(10, 3);
-            entity.Property(request => request.RequestedHours).HasPrecision(10, 3);
-            entity.HasOne(request => request.User)
-                .WithMany(user => user.LeaveRequests)
-                .HasForeignKey(request => request.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(request => request.ReviewedByUser)
-                .WithMany(user => user.ReviewedLeaveRequests)
-                .HasForeignKey(request => request.ReviewedByUserId)
-                .OnDelete(DeleteBehavior.SetNull);
-        });
-
-        modelBuilder.Entity<HolidayTransaction>(entity =>
-        {
-            entity.Property(transaction => transaction.Units).HasPrecision(10, 3);
-            entity.HasOne(transaction => transaction.HolidayBalance)
-                .WithMany(balance => balance.Transactions)
-                .HasForeignKey(transaction => transaction.HolidayBalanceId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(transaction => transaction.LeaveRequest)
-                .WithMany(request => request.Transactions)
-                .HasForeignKey(transaction => transaction.LeaveRequestId)
-                .OnDelete(DeleteBehavior.SetNull);
-        });
-
-        modelBuilder.Entity<SystemParameter>(entity =>
-        {
-            entity.Property(parameter => parameter.Key).HasMaxLength(100).IsRequired();
-            entity.Property(parameter => parameter.NumericValue).HasPrecision(14, 4);
-            entity.HasIndex(parameter => new { parameter.Key, parameter.EffectiveFrom })
-                .IsUnique();
-        });
-
-        modelBuilder.Entity<PublicHoliday>(entity =>
-        {
-            entity.Property(holiday => holiday.Name).HasMaxLength(200).IsRequired();
-            entity.HasIndex(holiday => holiday.Date).IsUnique();
-        });
+        await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""Users"" (
+            ""Id"" uuid PRIMARY KEY, ""Fullname"" varchar(200) NOT NULL, ""Username"" varchar(100) NOT NULL UNIQUE,
+            ""PasswordHash"" text NOT NULL, ""Role"" varchar(30) NOT NULL CHECK (""Role"" IN ('employee','accountant','admin')),
+            ""EmploymentType"" integer NOT NULL, ""EmploymentStartDate"" date NOT NULL, ""EmploymentEndDate"" date NULL, ""IsActive"" boolean NOT NULL);");
+        await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""WorkScheduleEntries"" (
+            ""Id"" uuid PRIMARY KEY, ""UserId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
+            ""DayOfWeek"" integer NOT NULL, ""Hours"" numeric(6,2) NOT NULL, ""EffectiveFrom"" date NOT NULL, ""EffectiveTo"" date NULL,
+            UNIQUE (""UserId"", ""DayOfWeek"", ""EffectiveFrom""));");
+        await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""SalaryHistory"" (
+            ""Id"" uuid PRIMARY KEY, ""UserId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
+            ""EffectiveFrom"" date NOT NULL, ""EffectiveTo"" date NULL, ""MonthlySalary"" numeric(14,2) NULL,
+            ""HourlyRate"" numeric(14,2) NULL, ""HolidayQualifyingSalary"" numeric(14,2) NOT NULL);");
+        await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""HolidayBalances"" (
+            ""Id"" uuid PRIMARY KEY, ""UserId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
+            ""AccountType"" integer NOT NULL, ""EarningYear"" integer NOT NULL, ""EarningPeriodStart"" date NOT NULL,
+            ""EarningPeriodEnd"" date NOT NULL, ""UsagePeriodStart"" date NOT NULL, ""UsagePeriodEnd"" date NOT NULL,
+            ""EarnedUnits"" numeric(10,3) NOT NULL, ""UsedUnits"" numeric(10,3) NOT NULL, ""TransferredUnits"" numeric(10,3) NOT NULL,
+            ""PaidOutUnits"" numeric(10,3) NOT NULL, ""QualifyingSalary"" numeric(14,2) NOT NULL,
+            ""HolidaySupplementAmount"" numeric(14,2) NOT NULL, UNIQUE (""UserId"", ""AccountType"", ""EarningYear""));");
+        await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""MonthlyAccruals"" (
+            ""Id"" uuid PRIMARY KEY, ""HolidayBalanceId"" uuid NOT NULL REFERENCES ""HolidayBalances""(""Id"") ON DELETE CASCADE,
+            ""AccrualMonth"" date NOT NULL, ""EarnedDays"" numeric(10,3) NOT NULL, ""EarnedHours"" numeric(10,3) NOT NULL,
+            ""QualifyingSalary"" numeric(14,2) NOT NULL, ""CreatedAtUtc"" timestamp with time zone NOT NULL,
+            UNIQUE (""HolidayBalanceId"", ""AccrualMonth""));");
+        await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""LeaveRequests"" (
+            ""Id"" uuid PRIMARY KEY, ""UserId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
+            ""AccountType"" integer NOT NULL, ""StartDate"" date NOT NULL, ""EndDate"" date NOT NULL,
+            ""RequestedDays"" numeric(10,3) NOT NULL, ""RequestedHours"" numeric(10,3) NOT NULL, ""IsMainHoliday"" boolean NOT NULL,
+            ""Status"" integer NOT NULL, ""Reason"" text NULL, ""RejectionReason"" text NULL, ""SubmittedAtUtc"" timestamp with time zone NOT NULL,
+            ""ReviewedAtUtc"" timestamp with time zone NULL, ""ReviewedByUserId"" uuid NULL REFERENCES ""Users""(""Id"") ON DELETE SET NULL);");
+        await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""HolidayTransactions"" (
+            ""Id"" uuid PRIMARY KEY, ""HolidayBalanceId"" uuid NOT NULL REFERENCES ""HolidayBalances""(""Id"") ON DELETE CASCADE,
+            ""TransactionType"" integer NOT NULL, ""TransactionDate"" date NOT NULL, ""Units"" numeric(10,3) NOT NULL,
+            ""LeaveRequestId"" uuid NULL REFERENCES ""LeaveRequests""(""Id"") ON DELETE SET NULL, ""Notes"" text NULL);");
+        await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""SystemParameters"" (
+            ""Id"" uuid PRIMARY KEY, ""Key"" varchar(100) NOT NULL, ""NumericValue"" numeric(14,4) NULL,
+            ""TextValue"" text NULL, ""BooleanValue"" boolean NULL, ""EffectiveFrom"" date NOT NULL, ""EffectiveTo"" date NULL,
+            ""Description"" text NULL, UNIQUE (""Key"", ""EffectiveFrom""));");
+        await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""PublicHolidays"" (
+            ""Id"" uuid PRIMARY KEY, ""Date"" date NOT NULL UNIQUE, ""Name"" varchar(200) NOT NULL, ""IsCompanySpecific"" boolean NOT NULL);");
     }
 }

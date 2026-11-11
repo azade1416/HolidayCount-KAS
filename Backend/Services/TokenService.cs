@@ -3,7 +3,8 @@ using System.Security.Claims;
 using System.Text;
 using Backend.Data;
 using Backend.Models;
-using Microsoft.EntityFrameworkCore;
+using LinqToDB;
+using LinqToDB.Async;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 
@@ -51,7 +52,7 @@ public class TokenService : ITokenService
             return null;
         }
         
-        var user = await _context.Users.FindAsync(userId);
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
         return user; 
     }
 }

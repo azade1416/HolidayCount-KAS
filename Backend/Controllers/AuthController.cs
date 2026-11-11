@@ -2,9 +2,10 @@ using System.Security.Claims;
 using Backend.Data;
 using Backend.DTOs;
 using Backend.Models;
+using LinqToDB;
+using LinqToDB.Async;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using ITokenService = Backend.Services.ITokenService;
 
 namespace Backend.Controllers;
@@ -91,8 +92,7 @@ public class AuthController : ControllerBase
             Role = targetRole
         };
 
-        _context.Users.Add(user);
-        await _context.SaveChangesAsync();
+        await _context.InsertAsync(user);
 
         return Ok(new { message = "User created successfully", id = user.Id, username = user.Username, role = user.Role });
     }
@@ -111,7 +111,7 @@ public class AuthController : ControllerBase
             return StatusCode(403, new { message = "Only administrators can manage users." });
         }
         
-        var targetUser = await _context.Users.FindAsync(id);
+        var targetUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == id);
         if (targetUser == null)
         {
             return NotFound(new { message = "User not found" });
@@ -144,7 +144,7 @@ public class AuthController : ControllerBase
             targetUser.Role = newRole;
         }
 
-        await _context.SaveChangesAsync();
+        await _context.UpdateAsync(targetUser);
         return Ok(new { message = "User updated successfully" });
     }
     
@@ -163,14 +163,13 @@ public class AuthController : ControllerBase
             return StatusCode(403, new { message = "Only administrators can manage users." });
         }
         
-        var targetUser = await _context.Users.FindAsync(id);
+        var targetUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == id);
         if (targetUser == null)
         {
             return NotFound(new { message = "User not found" });
         }
         
-        _context.Users.Remove(targetUser);
-        await _context.SaveChangesAsync();
+        await _context.DeleteAsync(targetUser);
 
         return Ok(new { message = "User deleted successfully" });
     }

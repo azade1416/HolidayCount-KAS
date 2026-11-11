@@ -1,8 +1,11 @@
+using LinqToDB.Mapping;
+
 namespace Backend.Models;
 
+[Table("SalaryHistory")]
 public class SalaryHistory
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
     public Guid UserId { get; set; }
     public DateOnly EffectiveFrom { get; set; }
     public DateOnly? EffectiveTo { get; set; }

@@ -1,9 +1,12 @@
+using LinqToDB.Mapping;
+
 namespace Backend.Models;
 
+[Table("MonthlyAccruals")]
 public class MonthlyAccrual
 {
-    public int Id { get; set; }
-    public int HolidayBalanceId { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid HolidayBalanceId { get; set; }
     public DateOnly AccrualMonth { get; set; }
     public decimal EarnedDays { get; set; }
     public decimal EarnedHours { get; set; }

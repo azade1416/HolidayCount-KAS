@@ -1,8 +1,11 @@
+using LinqToDB.Mapping;
+
 namespace Backend.Models;
 
+[Table("HolidayBalances")]
 public class HolidayBalance
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
     public Guid UserId { get; set; }
     public HolidayAccountType AccountType { get; set; }
     public int EarningYear { get; set; }
