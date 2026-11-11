@@ -25,9 +25,14 @@ public class User
     [Column("IsActive")]
     public bool IsActive { get; set; } = true;
 
+    [NotColumn]
     public ICollection<WorkScheduleEntry> WorkScheduleEntries { get; set; } = new List<WorkScheduleEntry>();
+    [NotColumn]
     public ICollection<SalaryHistory> SalaryHistory { get; set; } = new List<SalaryHistory>();
+    [NotColumn]
     public ICollection<HolidayBalance> HolidayBalances { get; set; } = new List<HolidayBalance>();
+    [NotColumn]
     public ICollection<LeaveRequest> LeaveRequests { get; set; } = new List<LeaveRequest>();
+    [NotColumn]
     public ICollection<LeaveRequest> ReviewedLeaveRequests { get; set; } = new List<LeaveRequest>();
 }
