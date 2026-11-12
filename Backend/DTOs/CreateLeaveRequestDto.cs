@@ -6,6 +6,7 @@ namespace Backend.DTOs;
 public class CreateLeaveRequestDto : IValidatableObject
 {
     [Required]
+    [EnumDataType(typeof(HolidayAccountType))]
     public HolidayAccountType AccountType { get; set; }
 
     [Required]
@@ -27,6 +28,20 @@ public class CreateLeaveRequestDto : IValidatableObject
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
+        if (StartDate == default)
+        {
+            yield return new ValidationResult(
+                "StartDate is required.",
+                new[] { nameof(StartDate) });
+        }
+
+        if (EndDate == default)
+        {
+            yield return new ValidationResult(
+                "EndDate is required.",
+                new[] { nameof(EndDate) });
+        }
+
         if (StartDate > EndDate)
         {
             yield return new ValidationResult(
