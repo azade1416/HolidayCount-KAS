@@ -53,7 +53,7 @@ public class LeaveRequestsController : ControllerBase
         await _context.InsertAsync(leaveRequest);
 
         return CreatedAtAction(
-            nameof(GetMine),
+            nameof(GetById),
             new { id = leaveRequest.Id },
             leaveRequest);
     }
