@@ -12,12 +12,16 @@ the database directly.
 - Timestamps use ISO 8601 UTC.
 - IDs are UUIDs.
 - Protected endpoints use `Authorization: Bearer <token>`.
-- Roles currently in scope: `employee` and `accountant`. The administrator
-  role is out of the first demo; accounting manages users.
+- Roles currently in scope: `employee` and `accountant`. Accounting manages
+  users and rule configuration in the first version.
+
+Each endpoint below is marked **Implemented** or **Planned**. Planned
+endpoints are part of the target design, not claims that the current branch
+already implements them.
 
 ## Authentication
 
-### `POST /auth/login`
+### `POST /auth/login` — **Implemented**
 
 Request:
 
@@ -46,7 +50,7 @@ Invalid credentials return `401`.
 
 These endpoints are for the accounting role.
 
-### `GET /auth/users`
+### `GET /auth/users` — **Implemented**
 
 Response `200`:
 
@@ -61,7 +65,7 @@ Response `200`:
 ]
 ```
 
-### `POST /auth/users`
+### `POST /auth/users` — **Implemented**
 
 Request:
 
@@ -70,7 +74,15 @@ Request:
   "fullName": "Anna Example",
   "username": "anna@example.com",
   "password": "password",
-  "role": "employee"
+  "role": "employee",
+  "employmentType": "salaried",
+  "workSchedule": [
+    { "dayOfWeek": "monday", "hours": 7.5 },
+    { "dayOfWeek": "tuesday", "hours": 7.5 },
+    { "dayOfWeek": "wednesday", "hours": 7.5 },
+    { "dayOfWeek": "thursday", "hours": 7.5 },
+    { "dayOfWeek": "friday", "hours": 7 }
+  ]
 }
 ```
 
@@ -85,14 +97,16 @@ Response `201`:
 }
 ```
 
-### `PUT /auth/users/{id}` and `DELETE /auth/users/{id}`
+### `PUT /auth/users/{id}` and `DELETE /auth/users/{id}` — **Implemented**
 
 Accounting can update or delete an employee. The update body may contain
-`fullName`, `username`, `password`, and `role`.
+`fullName`, `username`, `password`, `role`, `employmentType`, and
+`workSchedule`. `role` controls permissions; `employmentType` controls
+calculation rules and is independent of the permission role.
 
 ## Leave requests
 
-### `POST /leave-requests`
+### `POST /leave-requests` — **Implemented, calculation update required**
 
 Employee request:
 
@@ -101,45 +115,91 @@ Employee request:
   "accountType": "weeks1To5",
   "startDate": "2026-09-15",
   "endDate": "2026-09-20",
-  "requestedDays": 4,
-  "requestedHours": 30,
   "isMainHoliday": true,
   "reason": "Family holiday"
 }
 ```
 
-Response `201` returns the created leave request, including its generated
-`id`, `userId`, `status`, and `submittedAtUtc`.
+The server calculates `requestedDays` and `requestedHours` from the dates,
+the employee's effective schedule, and public holidays. Client-provided
+calculated values are ignored or rejected. Response `201`:
+
+```json
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "userId": "00000000-0000-0000-0000-000000000000",
+  "employeeName": "Anna Example",
+  "accountType": "weeks1To5",
+  "startDate": "2026-09-15",
+  "endDate": "2026-09-20",
+  "requestedDays": 4,
+  "requestedHours": 30,
+  "isMainHoliday": true,
+  "status": "pending",
+  "reason": "Family holiday",
+  "submittedAtUtc": "2026-09-10T12:00:00Z",
+  "reviewedAtUtc": null,
+  "reviewedByUserId": null,
+  "estimatedCostDkk": 3000.00
+}
+```
 
 `status` values are `pending`, `approved`, `rejected`, and `cancelled`.
 `accountType` values are `weeks1To5` and `week6`.
 
-### `GET /leave-requests`
+### `GET /leave-requests` — **Implemented**
 
-Employee response: the authenticated employee's own requests, newest first.
+Employee response: the authenticated employee's own requests, newest first,
+using the same request object as the `POST` response, including
+`reviewedAtUtc`, `reviewedByUserId`, `requestedDays`, `requestedHours`, and
+`estimatedCostDkk`.
 
-### `GET /leave-requests/{id}`
+### `GET /leave-requests/{id}` — **Implemented**
 
 Returns one request owned by the authenticated employee.
 
-### `GET /leave-requests/pending`
+### `GET /leave-requests/pending` — **Planned**
 
 Accounting response: all pending requests awaiting review. Each item includes
-the request data and the employee identity needed by the accounting screen.
+the request data and employee identity needed by the accounting screen:
 
-### `GET /leave-requests/all`
+```json
+[
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "employeeId": "00000000-0000-0000-0000-000000000000",
+    "employeeName": "Anna Example",
+    "accountType": "weeks1To5",
+    "startDate": "2026-09-15",
+    "endDate": "2026-09-20",
+    "requestedDays": 4,
+    "requestedHours": 30,
+    "estimatedCostDkk": 3000.00,
+    "status": "pending",
+    "submittedAtUtc": "2026-09-10T12:00:00Z"
+  }
+]
+```
+
+### `GET /leave-requests/all` — **Planned**
 
 Accounting response: all requests, including their status and review data.
-This endpoint is for the accounting history screen.
+This endpoint is for the accounting history screen and uses the same request
+object, including `employeeName`, `submittedAtUtc`, `reviewedAtUtc`,
+`reviewedByUserId`, days, hours, and DKK values.
 
-### `POST /leave-requests/{id}/approve`
+### `POST /leave-requests/{id}/approve` — **Planned**
 
 Accounting can approve a pending request. The operation records
 `reviewedAtUtc` and `reviewedByUserId`, deducts the calculated leave from the
 appropriate balance, and records the transaction. Repeating approval returns
 `409 Conflict` and must not deduct leave twice.
 
-### `POST /leave-requests/{id}/reject`
+Response `200` returns the updated request object, including `status:
+"approved"`, `reviewedAtUtc`, `reviewedByUserId`, and the resulting balance
+transaction.
+
+### `POST /leave-requests/{id}/reject` — **Planned**
 
 Accounting can reject a pending request. Request:
 
@@ -150,6 +210,9 @@ Accounting can reject a pending request. Request:
 ```
 
 Rejection leaves the balance unchanged and records the review data.
+Response `200` returns the updated request object, including `status:
+"rejected"`, `rejectionReason`, `reviewedAtUtc`, and
+`reviewedByUserId`.
 
 ### Cancellation
 
@@ -159,17 +222,40 @@ Employee self-cancellation is not part of the first demo contract. Employer canc
 
 ## Balances
 
-### `GET /balances/my`
+### `GET /balances/my` — **Planned**
 
-Employee response: the employee's balances, separated by `accountType`.
+Employee response:
 
-### `GET /balances`
+```json
+[
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "employeeId": "00000000-0000-0000-0000-000000000000",
+    "employeeName": "Anna Example",
+    "accountType": "weeks1To5",
+    "earningPeriodStart": "2026-01-01",
+    "earningPeriodEnd": "2026-12-31",
+    "usagePeriodStart": "2026-05-01",
+    "usagePeriodEnd": "2027-04-30",
+    "earnedDays": 25,
+    "usedDays": 4,
+    "remainingDays": 21,
+    "earnedHours": 187.5,
+    "usedHours": 30,
+    "remainingHours": 157.5,
+    "qualifyingSalaryDkk": 360000.00,
+    "holidaySupplementDkk": 0.00
+  }
+]
+```
+
+### `GET /balances` — **Planned**
 
 Accounting response: balances for employees, including `accountType`,
 earning/usage periods, earned units, used units, transferred units, and paid
-out units.
+out units, employee names, days, hours, and DKK values.
 
-### `GET /balances/{id}`
+### `GET /balances/{id}` — **Planned**
 
 Returns one balance with its earning period, usage/expiry period, current
 units, and account type. Employees may request only their own balance;
@@ -179,7 +265,7 @@ accounting may request an employee's balance.
 
 These endpoints support the employee request form and its estimate preview.
 
-### `POST /leave-requests/estimate`
+### `POST /leave-requests/estimate` — **Planned**
 
 Calculates the requested working days and hours without creating a request or
 changing a balance.
@@ -202,29 +288,28 @@ Response `200`:
   "accountType": "weeks1To5",
   "requestedDays": 4,
   "requestedHours": 30,
-  "estimatedCost": 30,
-  "usagePeriodEnd": "2027-05-31"
+  "estimatedCostDkk": 3000.00,
+  "usagePeriodEnd": "2027-04-30"
 }
 ```
 
 The calculation excludes weekends and public holidays and uses the
 employee's effective work schedule.
 
-### `GET /leave-requests/presets`
+### `GET /leave-requests/presets` — **Planned**
 
-Returns selectable request presets for the employee form, for example
-`weeks1To5` and `week6`. A preset supplies defaults only; it does not create a
-request.
+Returns the two selectable **account types**, `weeks1To5` and `week6`. These
+are not rule presets and do not create a request.
 
 ## Work schedules and public holidays
 
 These are read-only support endpoints for calculation and administration.
 
-### `GET /work-schedules/my`
+### `GET /work-schedules/my` — **Planned**
 
 Returns the authenticated employee's effective weekday schedule.
 
-### `GET /public-holidays`
+### `GET /public-holidays` — **Planned**
 
 Returns public holidays relevant to date and hour calculations.
 
@@ -234,7 +319,7 @@ The following endpoints cover the rule-presets part of the assignment. They
 are planned after the first demo unless the team agrees to implement them
 earlier.
 
-A preset is a starting point selected by an administrator and then adjusted.
+A preset is a starting point selected by accounting and then adjusted.
 Examples include:
 
 - `Ferieloven` — five weeks;
@@ -243,38 +328,70 @@ Examples include:
 - `Hourly-paid staff` — holiday pay as a percentage instead of salary during
   holiday.
 
-### `GET /rule-presets`
+### `GET /rule-presets` — **Planned**
 
 Returns available built-in presets and their rule values.
 
-### `GET /rule-presets/{id}`
+### `GET /rule-presets/{id}` — **Planned**
 
 Returns one preset and its rule values.
 
-### `POST /rule-sets`
+### `POST /rule-sets` — **Planned**
 
-Administrator creates a custom, effective-dated rule set from a preset.
+Accounting creates a custom, effective-dated rule set from a preset.
 
-### `GET /rule-sets`
+### `GET /rule-sets` — **Planned**
 
 Returns rule-set versions, including effective dates and active status.
 
-### `GET /rule-sets/{id}`
+### `GET /rule-sets/{id}` — **Planned**
 
 Returns one rule-set version and its values.
 
-### `PUT /rule-sets/{id}`
+### `PUT /rule-sets/{id}` — **Planned**
 
-Administrator adjusts a rule-set version. Changes must be effective-dated and
+Accounting adjusts a rule-set version. Changes must be effective-dated and
 must not silently rewrite historical calculations.
 
-### `POST /rule-sets/{id}/activate`
+### `POST /rule-sets/{id}/activate` — **Planned**
 
-Administrator activates a rule-set version for future calculations.
+Accounting activates a rule-set version for future calculations.
 
-Rule administration and the administrator role are not required for the first
+Rule administration is not required for the first
 leave-request demo; the first demo uses seeded balances and a selected rule
 set.
+
+## Final settlement
+
+### `POST /balances/{id}/final-settlement` — **Planned**
+
+Accounting uses this action when an employee leaves. It closes the selected
+balance for a given settlement date, calculates the remaining payable amount,
+records the payout, and prevents further leave deductions from that balance.
+It is not the same as approving a leave request.
+
+Request:
+
+```json
+{
+  "settlementDate": "2026-12-31",
+  "reason": "Employment ended"
+}
+```
+
+Response `200`:
+
+```json
+{
+  "balanceId": "00000000-0000-0000-0000-000000000000",
+  "employeeName": "Anna Example",
+  "settlementDate": "2026-12-31",
+  "remainingDays": 21,
+  "remainingHours": 157.5,
+  "payoutDkk": 25200.00,
+  "status": "settled"
+}
+```
 
 ## Error shape
 
