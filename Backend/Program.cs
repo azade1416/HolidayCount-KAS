@@ -1,5 +1,6 @@
 using System.Text;
 using Backend.Data;
+using Backend.Security;
 using Backend.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -13,7 +14,7 @@ builder.Services.AddScoped<AppDbContext>(_ => new AppDbContext(connectionString)
 
 builder.Services.AddScoped<ITokenService, TokenService>();
 
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "DefaultFallbackSecretKey12345";
+var jwtKey = JwtConfiguration.GetSigningKey(builder.Configuration["Jwt:Key"]);
 var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
