@@ -65,7 +65,7 @@ Response `200`:
 ]
 ```
 
-### `POST /auth/users` — **Implemented**
+### `POST /auth/users` — **Implemented, update required**
 
 Request:
 
@@ -86,6 +86,11 @@ Request:
 }
 ```
 
+The current implementation does not yet accept `employmentType` or
+`workSchedule`, returns `200`, and still restricts this operation to `admin`.
+The target contract requires those fields, returns `201`, and uses the
+accountant permission agreed by the team.
+
 Response `201`:
 
 ```json
@@ -97,9 +102,11 @@ Response `201`:
 }
 ```
 
-### `PUT /auth/users/{id}` and `DELETE /auth/users/{id}` — **Implemented**
+### `PUT /auth/users/{id}` and `DELETE /auth/users/{id}` — **Implemented, update required**
 
-Accounting can update or delete an employee. The update body may contain
+The current implementation still uses the old permission and does not persist
+employment type or schedule. After the permission update, accounting can
+update or delete an employee. The update body may contain
 `fullName`, `username`, `password`, `role`, `employmentType`, and
 `workSchedule`. `role` controls permissions; `employmentType` controls
 calculation rules and is independent of the permission role.
@@ -133,14 +140,14 @@ calculated values are ignored or rejected. Response `201`:
   "startDate": "2026-09-15",
   "endDate": "2026-09-20",
   "requestedDays": 4,
-  "requestedHours": 30,
+  "requestedHours": 29.5,
   "isMainHoliday": true,
   "status": "pending",
   "reason": "Family holiday",
   "submittedAtUtc": "2026-09-10T12:00:00Z",
   "reviewedAtUtc": null,
   "reviewedByUserId": null,
-  "estimatedCostDkk": 3000.00
+  "estimatedCostDkk": 5740.00
 }
 ```
 
@@ -173,8 +180,8 @@ the request data and employee identity needed by the accounting screen:
     "startDate": "2026-09-15",
     "endDate": "2026-09-20",
     "requestedDays": 4,
-    "requestedHours": 30,
-    "estimatedCostDkk": 3000.00,
+    "requestedHours": 29.5,
+    "estimatedCostDkk": 5740.00,
     "status": "pending",
     "submittedAtUtc": "2026-09-10T12:00:00Z"
   }
@@ -195,9 +202,28 @@ Accounting can approve a pending request. The operation records
 appropriate balance, and records the transaction. Repeating approval returns
 `409 Conflict` and must not deduct leave twice.
 
-Response `200` returns the updated request object, including `status:
-"approved"`, `reviewedAtUtc`, `reviewedByUserId`, and the resulting balance
-transaction.
+Response `200`:
+
+```json
+{
+  "request": {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "employeeName": "Anna Example",
+    "status": "approved",
+    "reviewedAtUtc": "2026-09-11T09:00:00Z",
+    "reviewedByUserId": "00000000-0000-0000-0000-000000000000"
+  },
+  "transaction": {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "type": "usage",
+    "leaveRequestId": "00000000-0000-0000-0000-000000000000",
+    "hours": 29.5,
+    "days": 4,
+    "amountDkk": 5740.00,
+    "transactionDate": "2026-09-11"
+  }
+}
+```
 
 ### `POST /leave-requests/{id}/reject` — **Planned**
 
@@ -210,9 +236,21 @@ Accounting can reject a pending request. Request:
 ```
 
 Rejection leaves the balance unchanged and records the review data.
-Response `200` returns the updated request object, including `status:
-"rejected"`, `rejectionReason`, `reviewedAtUtc`, and
-`reviewedByUserId`.
+Response `200`:
+
+```json
+{
+  "request": {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "employeeName": "Anna Example",
+    "status": "rejected",
+    "rejectionReason": "Dates are outside the available usage period",
+    "reviewedAtUtc": "2026-09-11T09:00:00Z",
+    "reviewedByUserId": "00000000-0000-0000-0000-000000000000"
+  },
+  "transaction": null
+}
+```
 
 ### Cancellation
 
@@ -233,16 +271,19 @@ Employee response:
     "employeeId": "00000000-0000-0000-0000-000000000000",
     "employeeName": "Anna Example",
     "accountType": "weeks1To5",
-    "earningPeriodStart": "2026-01-01",
-    "earningPeriodEnd": "2026-12-31",
-    "usagePeriodStart": "2026-05-01",
-    "usagePeriodEnd": "2027-04-30",
+    "earningPeriodStart": "2026-09-01",
+    "earningPeriodEnd": "2027-08-31",
+    "usagePeriodStart": "2026-09-01",
+    "usagePeriodEnd": "2027-12-31",
     "earnedDays": 25,
     "usedDays": 4,
     "remainingDays": 21,
-    "earnedHours": 187.5,
-    "usedHours": 30,
-    "remainingHours": 157.5,
+    "earnedHours": 185,
+    "usedHours": 29.5,
+    "remainingHours": 155.5,
+    "accruedDkk": 36000.00,
+    "usedDkk": 5740.00,
+    "remainingDkk": 30260.00,
     "qualifyingSalaryDkk": 360000.00,
     "holidaySupplementDkk": 0.00
   }
@@ -253,7 +294,9 @@ Employee response:
 
 Accounting response: balances for employees, including `accountType`,
 earning/usage periods, earned units, used units, transferred units, and paid
-out units, employee names, days, hours, and DKK values.
+out units, employee names, days, hours, and DKK values. The response includes
+`accruedDkk`, `usedDkk`, and `remainingDkk`; `qualifyingSalaryDkk` is reported
+separately and must not be used as the remaining balance.
 
 ### `GET /balances/{id}` — **Planned**
 
@@ -287,9 +330,9 @@ Response `200`:
 {
   "accountType": "weeks1To5",
   "requestedDays": 4,
-  "requestedHours": 30,
-  "estimatedCostDkk": 3000.00,
-  "usagePeriodEnd": "2027-04-30"
+  "requestedHours": 29.5,
+  "estimatedCostDkk": 5740.00,
+  "usagePeriodEnd": "2027-12-31"
 }
 ```
 
@@ -368,16 +411,23 @@ set.
 Accounting uses this action when an employee leaves. It closes the selected
 balance for a given settlement date, calculates the remaining payable amount,
 records the payout, and prevents further leave deductions from that balance.
-It is not the same as approving a leave request.
+It is not the same as approving a leave request. The operation is idempotency
+protected: a second settlement for the same balance returns `409 Conflict`
+and creates no second payout.
 
 Request:
 
 ```json
 {
   "settlementDate": "2026-12-31",
-  "reason": "Employment ended"
+  "reason": "Employment ended",
+  "paymentMethod": "direct"
 }
 ```
+
+`paymentMethod` is either `direct` for a direct employer payment or
+`feriepengeinfo` when the amount is handled through Feriepengeinfo. These
+amounts must be recorded separately.
 
 Response `200`:
 
@@ -389,6 +439,8 @@ Response `200`:
   "remainingDays": 21,
   "remainingHours": 157.5,
   "payoutDkk": 25200.00,
+  "paymentMethod": "direct",
+  "payoutTransactionId": "00000000-0000-0000-0000-000000000000",
   "status": "settled"
 }
 ```
