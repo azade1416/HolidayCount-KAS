@@ -1,0 +1,299 @@
+
+import type { Employee, HolidayRequest } from "./employee";
+
+// Types
+export type SystemRole = "Employee" | "Accountant" | "Admin";
+export type Weekday = "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday";
+
+export interface DailySchedule {
+    from: string;
+    to: string;
+}
+
+export type WeeklySchedule = Record<Weekday, DailySchedule>;
+
+export interface MockUser {
+    id: number;
+    name: string;
+    email: string;
+    password: string;
+    role: SystemRole;
+    employmentType?: string;
+    weeklySchedule?: WeeklySchedule;
+}
+
+export interface MockHolidayBalance {
+    hours: number;
+}
+
+export interface MockHolidayAccount {
+    id: number;
+    employeeId: number;
+    name: string;
+    accrued: MockHolidayBalance;
+    used: MockHolidayBalance;
+    remaining: MockHolidayBalance;
+    eligibleDate: string;
+}
+
+export interface MockRequest extends HolidayRequest {
+    employeeId: number;
+    employee: string;
+}
+
+export interface CreateEmployeeData {
+    name: string;
+    email: string;
+    password: string;
+    employmentType: string;
+    weeklySchedule?: WeeklySchedule;
+}
+
+export interface AccountantRequest {
+    id: string;
+    employee: string;
+    dates: string;
+    status: string;
+    submittedDate: string;
+}
+
+// Mock database
+const defaultSchedule = Object.fromEntries(
+    ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map(day => [
+        day,
+        { from: "08:00", to: "16:00" }
+    ])
+) as WeeklySchedule;
+
+let users: MockUser[] = [
+    {
+        id: 1,
+        name: "John Carter",
+        email: "john@example.com",
+        password: "123456",
+        role: "Employee",
+        employmentType: "Full-time",
+        weeklySchedule: defaultSchedule
+    },
+    {
+        id: 2,
+        name: "Accountant",
+        email: "accountant@example.com",
+        password: "123456",
+        role: "Accountant"
+    },
+    {
+        id: 3,
+        name: "Admin",
+        email: "admin@example.com",
+        password: "123456",
+        role: "Admin"
+    }
+];
+
+let loggedInUser: MockUser | null = null;
+
+let employees: Employee[] = [
+    { id: 1, name: "John Carter", role: "Full-time" }
+];
+
+let holidayAccounts: MockHolidayAccount[] = [
+    {
+        id: 1,
+        employeeId: 1,
+        name: "Weeks 1–5",
+        accrued: { hours: 0 },
+        used: { hours: 0 },
+        remaining: { hours: 0 },
+        eligibleDate: ""
+    },
+    {
+        id: 2,
+        employeeId: 1,
+        name: "Week 6",
+        accrued: { hours: 0 },
+        used: { hours: 0 },
+        remaining: { hours: 0 },
+        eligibleDate: ""
+    }
+];
+
+let holidayRequests: MockRequest[] = [];
+let nextUserId = 4;
+let nextRequestId = 1;
+
+// Authentication
+export async function login(
+    email: string,
+    password: string,
+    role: SystemRole
+): Promise<MockUser | null> {
+    const user = users.find(u =>
+        u.email === email && u.password === password && u.role === role
+    );
+
+    loggedInUser = user ?? null;
+    return user ? { ...user } : null;
+}
+
+export async function getCurrentUser(): Promise<Omit<MockUser, "password"> | null> {
+    if (!loggedInUser) return null;
+
+    const { password, ...user } = loggedInUser;
+    return user;
+}
+
+export async function logout(): Promise<void> {
+    loggedInUser = null;
+}
+
+// User management
+export async function getUsers(): Promise<Omit<MockUser, "password">[]> {
+    return users.map(({ password, ...user }) => user);
+}
+
+export async function createEmployee(data: CreateEmployeeData): Promise<void> {
+    if (users.some(u => u.email === data.email))
+        throw new Error("An account with this email already exists.");
+
+    const role: SystemRole = data.employmentType === "Admin" ? "Admin"
+        : data.employmentType === "Accountant" ? "Accountant" : "Employee";
+
+    const user: MockUser = {
+        id: nextUserId++,
+        name: data.name,
+        email: data.email,
+        password: data.password,
+        role,
+        employmentType: role === "Employee" ? data.employmentType : undefined,
+        weeklySchedule: role === "Employee" ? data.weeklySchedule : undefined
+    };
+
+    users.push(user);
+
+    if (role === "Employee")
+        employees.push({ id: user.id, name: user.name, role: data.employmentType });
+}
+
+export async function updateUser(
+    id: number,
+    updates: Partial<Pick<MockUser,
+        "name" | "email" | "password" | "role" | "employmentType" | "weeklySchedule"
+    >>
+): Promise<MockUser> {
+    const user = users.find(u => u.id === id);
+    if (!user) throw new Error("User not found.");
+
+    if (updates.email && users.some(u => u.email === updates.email && u.id !== id))
+        throw new Error("An account with this email already exists.");
+
+    Object.assign(user, updates);
+
+    if (user.role === "Employee") {
+        const employee = employees.find(e => e.id === id);
+
+        if (employee)
+            Object.assign(employee, { name: user.name, role: user.employmentType });
+        else
+            employees.push({
+                id,
+                name: user.name,
+                role: user.employmentType || "Full-time"
+            });
+    } else {
+        employees = employees.filter(e => e.id !== id);
+    }
+
+    return { ...user };
+}
+
+export async function deleteUser(id: number): Promise<void> {
+    if (!users.some(u => u.id === id))
+        throw new Error("User not found.");
+
+    users = users.filter(u => u.id !== id);
+    employees = employees.filter(e => e.id !== id);
+    holidayAccounts = holidayAccounts.filter(a => a.employeeId !== id);
+    holidayRequests = holidayRequests.filter(r => r.employeeId !== id);
+
+    if (loggedInUser?.id === id) loggedInUser = null;
+}
+
+// Employee information
+export async function getEmployees(): Promise<Employee[]> {
+    return employees.map(e => ({ ...e }));
+}
+
+export async function getEmployeeById(id: number): Promise<Employee | undefined> {
+    const employee = employees.find(e => e.id === id);
+    return employee ? { ...employee } : undefined;
+}
+
+export async function getEmployeeSchedule(id: number): Promise<WeeklySchedule | undefined> {
+    const schedule = users.find(u => u.id === id)?.weeklySchedule;
+    return schedule ? { ...schedule } : undefined;
+}
+
+// Holiday accounts
+export async function getHolidayAccounts(employeeId: number): Promise<MockHolidayAccount[]> {
+    return holidayAccounts
+        .filter(a => a.employeeId === employeeId)
+        .map(a => ({
+            ...a,
+            accrued: { ...a.accrued },
+            used: { ...a.used },
+            remaining: { ...a.remaining }
+        }));
+}
+
+// Holiday requests
+export async function createHolidayRequest(
+    request: Omit<MockRequest, "id" | "status" | "submittedDate" | "decisionDate">
+): Promise<MockRequest> {
+    const newRequest: MockRequest = {
+        ...request,
+        id: nextRequestId++,
+        status: "Pending",
+        submittedDate: new Date().toISOString().split("T")[0],
+        decisionDate: ""
+    };
+
+    holidayRequests.push(newRequest);
+    return { ...newRequest };
+}
+
+export async function getRequests(): Promise<AccountantRequest[]> {
+    return holidayRequests
+        .filter(r => r.status === "Pending")
+        .map(r => ({
+            id: String(r.id),
+            employee: r.employee,
+            dates: `${r.startDate} – ${r.endDate}`,
+            status: r.status,
+            submittedDate: r.submittedDate
+        }));
+}
+
+export async function getRequestHistory(): Promise<MockRequest[]> {
+    return holidayRequests
+        .filter(r => r.status !== "Pending")
+        .map(r => ({ ...r }));
+}
+
+export async function approveRequest(id: number): Promise<MockRequest> {
+    return updateRequestStatus(id, "Approved");
+}
+
+export async function rejectRequest(id: number): Promise<MockRequest> {
+    return updateRequestStatus(id, "Rejected");
+}
+
+async function updateRequestStatus(id: number, status: string): Promise<MockRequest> {
+    const request = holidayRequests.find(r => r.id === id);
+    if (!request) throw new Error("Holiday request not found.");
+
+    request.status = status;
+    request.decisionDate = new Date().toISOString().split("T")[0];
+
+    return { ...request };
+}
