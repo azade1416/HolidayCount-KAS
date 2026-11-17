@@ -56,6 +56,12 @@ export interface AccountantRequest {
     submittedDate: string;
 }
 
+export interface Announcement {
+    id: number;
+    message: string;
+    date: string;
+}
+
 // Default data
 const weekdays: Weekday[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
@@ -84,7 +90,7 @@ let users: MockUser[] = [
         email: "john@example.com",
         password: "123456",
         role: "Employee",
-        employmentType: "Full-time",
+        employmentType: "Full-time employee",
         weeklySchedule: defaultSchedule
     },
     {
@@ -106,14 +112,16 @@ let users: MockUser[] = [
 let loggedInUser: MockUser | null = null;
 
 let employees: Employee[] = [
-    { id: 1, name: "John Carter", role: "Full-time" }
+    { id: 1, name: "John Carter", role: "Full-time employee" }
 ];
 
 let holidayAccounts: MockHolidayAccount[] = createHolidayAccounts(1);
 let holidayRequests: MockRequest[] = [];
+let announcements: Announcement[] = [];
 
 let nextUserId = 4;
 let nextRequestId = 1;
+let nextAnnouncementId = 1;
 
 // Authentication
 export async function login(
@@ -202,7 +210,7 @@ export async function updateUser(
             employees.push({
                 id,
                 name: user.name,
-                role: user.employmentType || "Full-time"
+                role: user.employmentType || "Full-time employee"
             });
 
             holidayAccounts.push(...createHolidayAccounts(id));
@@ -320,4 +328,19 @@ async function updateRequestStatus(id: number, status: string): Promise<MockRequ
     request.decisionDate = new Date().toISOString().split("T")[0];
 
     return { ...request };
+}
+
+// Announcements
+export async function sendAnnouncement(message: string): Promise<void> {
+    if (!message.trim()) throw new Error("Please enter a message.");
+
+    announcements.push({
+        id: nextAnnouncementId++,
+        message: message.trim(),
+        date: new Date().toISOString().split("T")[0]
+    });
+}
+
+export async function getAnnouncements(): Promise<Announcement[]> {
+    return announcements.map(a => ({ ...a }));
 }

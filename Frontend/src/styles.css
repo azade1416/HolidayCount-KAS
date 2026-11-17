@@ -170,3 +170,8 @@ body {
     padding: 6px;
     box-sizing: border-box;
 }
+.table {
+    width: 100%;
+    table-layout: fixed;
+    text-align: left;
+}

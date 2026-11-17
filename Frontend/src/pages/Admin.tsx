@@ -1,7 +1,10 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getUsers, getCurrentUser, deleteUser, type MockUser } from "../mockApi";
+import {
+    getUsers, getCurrentUser, deleteUser,
+    sendAnnouncement, getAnnouncements, type MockUser, type Announcement
+} from "../mockApi";
 import CreateEmployee from "./CreateEmployee";
 
 type AdminUser = Omit<MockUser, "password">;
@@ -12,6 +15,8 @@ function Admin() {
     const [selectedUser, setSelectedUser] = useState<AdminUser | undefined>();
     const [showModal, setShowModal] = useState(false);
     const [refresh, setRefresh] = useState(0);
+    const [message, setMessage] = useState("");
+    const [announcements, setAnnouncements] = useState<Announcement[]>([]);
 
     const navigate = useNavigate();
 
@@ -25,6 +30,10 @@ function Admin() {
         };
 
         loadUsers();
+    }, [refresh]);
+
+    useEffect(() => {
+        getAnnouncements().then(setAnnouncements);
     }, [refresh]);
 
     const closeModal = () => {
@@ -43,6 +52,18 @@ function Admin() {
         }
     };
 
+    const handleSend = async () => {
+        if (!message.trim()) return;
+
+        try {
+            await sendAnnouncement(message);
+            setMessage("");
+            setAnnouncements(await getAnnouncements());
+        } catch (error) {
+            alert(error instanceof Error ? error.message : "Could not send message.");
+        }
+    };
+
     return (
         <div className="dashboard">
             <div className="header">
@@ -53,6 +74,32 @@ function Admin() {
             <button onClick={() => setShowModal(true)}>
                 Create Employee Account
             </button>
+
+            <div className="section">
+                <h2>Announcements</h2>
+
+                <textarea
+                    value={message}
+                    onChange={e => setMessage(e.target.value)}
+                    placeholder="Write a message to all employees..."
+                    rows={4}
+                    style={{ width: "100%", padding: 10, boxSizing: "border-box" }}
+                />
+
+                <button onClick={handleSend} disabled={!message.trim()}>
+                    Send
+                </button>
+
+                
+
+                {announcements.map(a => (
+                    <div key={a.id} style={{ padding: "12px 0", borderBottom: "1px solid #ddd" }}>
+                        <p>{a.message}</p>
+                        <small>{a.date}</small>
+                    </div>
+                ))}
+                
+            </div>
 
             <div className="section">
                 <h2>User Management</h2>

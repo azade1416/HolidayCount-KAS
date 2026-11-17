@@ -48,7 +48,7 @@ function CreateEmployee({ onClose, onCreated }: { onClose: () => void; onCreated
                     <label>Password</label><input name="password" type="password" required />
                     <label>Role</label>
                     <select value={role} onChange={e => setRole(e.target.value)}>
-                        {["Full-time", "Part-time", "Admin", "Accountant"].map(r => <option key={r}>{r}</option>)}
+                        {["Full-time employee", "Part-time employee", "Admin", "Accountant"].map(r => <option key={r}>{r}</option>)}
                     </select>
 
                     {isEmployee && <div className="weekly-schedule">
