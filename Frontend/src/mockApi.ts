@@ -1,7 +1,6 @@
 
 import type { Employee, HolidayRequest } from "./employee";
 
-// Types
 export type SystemRole = "Employee" | "Accountant" | "Admin";
 export type Weekday = "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday";
 
@@ -57,14 +56,27 @@ export interface AccountantRequest {
     submittedDate: string;
 }
 
-// Mock database
+// Default data
+const weekdays: Weekday[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+
 const defaultSchedule = Object.fromEntries(
-    ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map(day => [
-        day,
-        { from: "08:00", to: "16:00" }
-    ])
+    weekdays.map(day => [day, { from: "08:00", to: "16:00" }])
 ) as WeeklySchedule;
 
+const accountTemplates = ["Weeks 1–5", "Week 6"];
+
+const createHolidayAccounts = (employeeId: number): MockHolidayAccount[] =>
+    accountTemplates.map((name, index) => ({
+        id: employeeId * 10 + index + 1,
+        employeeId,
+        name,
+        accrued: { hours: 0 },
+        used: { hours: 0 },
+        remaining: { hours: 0 },
+        eligibleDate: ""
+    }));
+
+// Mock database
 let users: MockUser[] = [
     {
         id: 1,
@@ -97,28 +109,9 @@ let employees: Employee[] = [
     { id: 1, name: "John Carter", role: "Full-time" }
 ];
 
-let holidayAccounts: MockHolidayAccount[] = [
-    {
-        id: 1,
-        employeeId: 1,
-        name: "Weeks 1–5",
-        accrued: { hours: 0 },
-        used: { hours: 0 },
-        remaining: { hours: 0 },
-        eligibleDate: ""
-    },
-    {
-        id: 2,
-        employeeId: 1,
-        name: "Week 6",
-        accrued: { hours: 0 },
-        used: { hours: 0 },
-        remaining: { hours: 0 },
-        eligibleDate: ""
-    }
-];
-
+let holidayAccounts: MockHolidayAccount[] = createHolidayAccounts(1);
 let holidayRequests: MockRequest[] = [];
+
 let nextUserId = 4;
 let nextRequestId = 1;
 
@@ -156,8 +149,9 @@ export async function createEmployee(data: CreateEmployeeData): Promise<void> {
     if (users.some(u => u.email === data.email))
         throw new Error("An account with this email already exists.");
 
-    const role: SystemRole = data.employmentType === "Admin" ? "Admin"
-        : data.employmentType === "Accountant" ? "Accountant" : "Employee";
+    const role: SystemRole =
+        data.employmentType === "Admin" ? "Admin" :
+            data.employmentType === "Accountant" ? "Accountant" : "Employee";
 
     const user: MockUser = {
         id: nextUserId++,
@@ -171,8 +165,15 @@ export async function createEmployee(data: CreateEmployeeData): Promise<void> {
 
     users.push(user);
 
-    if (role === "Employee")
-        employees.push({ id: user.id, name: user.name, role: data.employmentType });
+    if (role === "Employee") {
+        employees.push({
+            id: user.id,
+            name: user.name,
+            role: data.employmentType
+        });
+
+        holidayAccounts.push(...createHolidayAccounts(user.id));
+    }
 }
 
 export async function updateUser(
@@ -192,14 +193,20 @@ export async function updateUser(
     if (user.role === "Employee") {
         const employee = employees.find(e => e.id === id);
 
-        if (employee)
-            Object.assign(employee, { name: user.name, role: user.employmentType });
-        else
+        if (employee) {
+            Object.assign(employee, {
+                name: user.name,
+                role: user.employmentType
+            });
+        } else {
             employees.push({
                 id,
                 name: user.name,
                 role: user.employmentType || "Full-time"
             });
+
+            holidayAccounts.push(...createHolidayAccounts(id));
+        }
     } else {
         employees = employees.filter(e => e.id !== id);
     }
@@ -231,7 +238,12 @@ export async function getEmployeeById(id: number): Promise<Employee | undefined>
 
 export async function getEmployeeSchedule(id: number): Promise<WeeklySchedule | undefined> {
     const schedule = users.find(u => u.id === id)?.weeklySchedule;
-    return schedule ? { ...schedule } : undefined;
+
+    return schedule
+        ? Object.fromEntries(
+            Object.entries(schedule).map(([day, hours]) => [day, { ...hours }])
+        ) as WeeklySchedule
+        : undefined;
 }
 
 // Holiday accounts
@@ -260,6 +272,18 @@ export async function createHolidayRequest(
 
     holidayRequests.push(newRequest);
     return { ...newRequest };
+}
+
+export async function getEmployeeRequestHistory(employeeId: number): Promise<MockRequest[]> {
+    return holidayRequests
+        .filter(r => r.employeeId === employeeId)
+        .map(r => ({ ...r }));
+}
+
+export async function getApprovedHolidayRequests(): Promise<MockRequest[]> {
+    return holidayRequests
+        .filter(r => r.status === "Approved")
+        .map(r => ({ ...r }));
 }
 
 export async function getRequests(): Promise<AccountantRequest[]> {
