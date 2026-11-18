@@ -141,7 +141,7 @@ function Employee() {
 
                     <button onClick={submitRequest} disabled={!accounts.length}>Submit holiday request</button>
 
-                    <hr style={{ margin: "16px 0" }} />
+                    <hr style={{ border: 0, borderTop: "4px solid black", margin: "20px 0" }} />
                     <h3>Request holiday cancellation</h3>
                     <label>Approved holiday</label>
                     <select value={cancellationId} onChange={e => setCancellationId(e.target.value)}
@@ -157,7 +157,7 @@ function Employee() {
                     </button>
                     {error && <p style={{ color: "red" }}>{error}</p>}
 
-                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #ddd" }}>
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "4px solid black" }}>
                         <strong>Unused holiday transfer</strong>
                         <p style={{ fontSize: 12, color: "#666" }}>Have unused holiday hours you may want to carry over?</p>
                         <button disabled style={{ ...button, opacity: 0.6 }}>Request transfer</button>
@@ -199,7 +199,7 @@ function Employee() {
                         </p>
                     </div>
 
-                    <hr style={{ border: 0, borderTop: "1px solid #ddd", margin: "20px 0" }} />
+                    <hr style={{ border: 0, borderTop: "4px solid black", margin: "20px 0" }} />
                     <h3>Working schedule</h3>
                     <p style={{ fontSize: 12, color: "#666" }}>Your current weekly working hours.</p>
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
