@@ -3,6 +3,7 @@ import type { Employee, HolidayRequest } from "./employee";
 
 export type SystemRole = "Employee" | "Accountant" | "Admin";
 export type Weekday = "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday";
+export type RequestType = "Holiday" | "Cancellation";
 
 export interface DailySchedule {
     from: string;
@@ -10,6 +11,13 @@ export interface DailySchedule {
 }
 
 export type WeeklySchedule = Record<Weekday, DailySchedule>;
+
+export interface ScheduleChange {
+    id: number;
+    date: string;
+    previousSchedule: WeeklySchedule;
+    newSchedule: WeeklySchedule;
+}
 
 export interface MockUser {
     id: number;
@@ -38,6 +46,8 @@ export interface MockHolidayAccount {
 export interface MockRequest extends HolidayRequest {
     employeeId: number;
     employee: string;
+    type: RequestType;
+    originalRequestId?: number;
 }
 
 export interface CreateEmployeeData {
@@ -54,6 +64,7 @@ export interface AccountantRequest {
     dates: string;
     status: string;
     submittedDate: string;
+    type: RequestType;
 }
 
 export interface Announcement {
@@ -118,10 +129,12 @@ let employees: Employee[] = [
 let holidayAccounts: MockHolidayAccount[] = createHolidayAccounts(1);
 let holidayRequests: MockRequest[] = [];
 let announcements: Announcement[] = [];
+let scheduleHistory: Record<number, ScheduleChange[]> = {};
 
 let nextUserId = 4;
 let nextRequestId = 1;
 let nextAnnouncementId = 1;
+let nextScheduleChangeId = 1;
 
 // Authentication
 export async function login(
@@ -196,7 +209,29 @@ export async function updateUser(
     if (updates.email && users.some(u => u.email === updates.email && u.id !== id))
         throw new Error("An account with this email already exists.");
 
-    Object.assign(user, updates);
+    // Automatically save schedule changes
+    if (
+        updates.weeklySchedule &&
+        user.weeklySchedule &&
+        JSON.stringify(user.weeklySchedule) !== JSON.stringify(updates.weeklySchedule)
+    ) {
+        scheduleHistory[id] ??= [];
+
+        scheduleHistory[id].push({
+            id: nextScheduleChangeId++,
+            date: new Date().toISOString().split("T")[0],
+            previousSchedule: JSON.parse(JSON.stringify(user.weeklySchedule)),
+            newSchedule: JSON.parse(JSON.stringify(updates.weeklySchedule))
+        });
+    }
+
+    const role: SystemRole = updates.employmentType !== undefined
+        ? updates.employmentType === "Admin" ? "Admin"
+            : updates.employmentType === "Accountant" ? "Accountant"
+                : "Employee"
+        : updates.role ?? user.role;
+
+    Object.assign(user, updates, { role });
 
     if (user.role === "Employee") {
         const employee = employees.find(e => e.id === id);
@@ -230,6 +265,7 @@ export async function deleteUser(id: number): Promise<void> {
     employees = employees.filter(e => e.id !== id);
     holidayAccounts = holidayAccounts.filter(a => a.employeeId !== id);
     holidayRequests = holidayRequests.filter(r => r.employeeId !== id);
+    delete scheduleHistory[id];
 
     if (loggedInUser?.id === id) loggedInUser = null;
 }
@@ -254,6 +290,19 @@ export async function getEmployeeSchedule(id: number): Promise<WeeklySchedule | 
         : undefined;
 }
 
+// Working schedule history
+export async function getScheduleHistory(id: number): Promise<ScheduleChange[]> {
+    return (scheduleHistory[id] || []).map(change => ({
+        ...change,
+        previousSchedule: Object.fromEntries(
+            Object.entries(change.previousSchedule).map(([day, hours]) => [day, { ...hours }])
+        ) as WeeklySchedule,
+        newSchedule: Object.fromEntries(
+            Object.entries(change.newSchedule).map(([day, hours]) => [day, { ...hours }])
+        ) as WeeklySchedule
+    }));
+}
+
 // Holiday accounts
 export async function getHolidayAccounts(employeeId: number): Promise<MockHolidayAccount[]> {
     return holidayAccounts
@@ -268,10 +317,12 @@ export async function getHolidayAccounts(employeeId: number): Promise<MockHolida
 
 // Holiday requests
 export async function createHolidayRequest(
-    request: Omit<MockRequest, "id" | "status" | "submittedDate" | "decisionDate">
+    request: Omit<MockRequest, "id" | "status" | "submittedDate" | "decisionDate" | "type">
+        & { type?: RequestType }
 ): Promise<MockRequest> {
     const newRequest: MockRequest = {
         ...request,
+        type: request.type ?? "Holiday",
         id: nextRequestId++,
         status: "Pending",
         submittedDate: new Date().toISOString().split("T")[0],
@@ -282,6 +333,37 @@ export async function createHolidayRequest(
     return { ...newRequest };
 }
 
+export async function createCancellationRequest(
+    employeeId: number,
+    employee: string,
+    originalRequestId: number
+): Promise<MockRequest> {
+    const original = holidayRequests.find(r =>
+        r.id === originalRequestId &&
+        r.employeeId === employeeId &&
+        r.status === "Approved" &&
+        (r.type ?? "Holiday") === "Holiday"
+    );
+
+    if (!original) throw new Error("Approved holiday not found.");
+
+    if (holidayRequests.some(r =>
+        r.originalRequestId === originalRequestId && r.status === "Pending"
+    )) {
+        throw new Error("A cancellation request is already pending.");
+    }
+
+    return createHolidayRequest({
+        employeeId,
+        employee,
+        account: original.account,
+        startDate: original.startDate,
+        endDate: original.endDate,
+        type: "Cancellation",
+        originalRequestId
+    });
+}
+
 export async function getEmployeeRequestHistory(employeeId: number): Promise<MockRequest[]> {
     return holidayRequests
         .filter(r => r.employeeId === employeeId)
@@ -290,7 +372,7 @@ export async function getEmployeeRequestHistory(employeeId: number): Promise<Moc
 
 export async function getApprovedHolidayRequests(): Promise<MockRequest[]> {
     return holidayRequests
-        .filter(r => r.status === "Approved")
+        .filter(r => r.status === "Approved" && (r.type ?? "Holiday") === "Holiday")
         .map(r => ({ ...r }));
 }
 
@@ -302,7 +384,8 @@ export async function getRequests(): Promise<AccountantRequest[]> {
             employee: r.employee,
             dates: `${r.startDate} – ${r.endDate}`,
             status: r.status,
-            submittedDate: r.submittedDate
+            submittedDate: r.submittedDate,
+            type: r.type ?? "Holiday"
         }));
 }
 
@@ -326,6 +409,15 @@ async function updateRequestStatus(id: number, status: string): Promise<MockRequ
 
     request.status = status;
     request.decisionDate = new Date().toISOString().split("T")[0];
+
+    if (request.type === "Cancellation" && status === "Approved") {
+        const original = holidayRequests.find(r => r.id === request.originalRequestId);
+
+        if (original) {
+            original.status = "Cancelled";
+            original.decisionDate = request.decisionDate;
+        }
+    }
 
     return { ...request };
 }

@@ -1,9 +1,9 @@
-
 import { Fragment, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
     getCurrentUser, getHolidayAccounts, getEmployeeRequestHistory,
-    getApprovedHolidayRequests, getEmployees, createHolidayRequest, logout
+    getApprovedHolidayRequests, getEmployees, createHolidayRequest,
+    createCancellationRequest, logout
 } from "../mockApi";
 import type { MockUser, MockHolidayAccount, MockRequest } from "../mockApi";
 import type { Employee as EmployeeType } from "../employee";
@@ -22,6 +22,7 @@ function Employee() {
     const [accountId, setAccountId] = useState("");
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
+    const [cancellationId, setCancellationId] = useState("");
     const [month, setMonth] = useState(new Date());
     const [error, setError] = useState("");
 
@@ -36,6 +37,7 @@ function Employee() {
             getApprovedHolidayRequests(),
             getEmployees()
         ]);
+
         setAccounts(a);
         setHistory(h);
         setApproved(all);
@@ -44,8 +46,13 @@ function Employee() {
 
     useEffect(() => { void loadData(); }, []);
 
+    const approvedHolidays = approved.filter(r =>
+        r.employeeId === user?.id && (r.type ?? "Holiday") === "Holiday"
+    );
+
     async function submitRequest() {
         const account = accounts.find(a => a.id === Number(accountId));
+
         if (!user || !account || !startDate || !endDate || endDate < startDate) {
             setError("Please select an account and valid dates.");
             return;
@@ -63,6 +70,22 @@ function Employee() {
         setEndDate("");
         setError("");
         await loadData();
+    }
+
+    async function submitCancellation() {
+        if (!user || !cancellationId) {
+            setError("Please select an approved holiday to cancel.");
+            return;
+        }
+
+        try {
+            await createCancellationRequest(user.id, user.name, Number(cancellationId));
+            setCancellationId("");
+            setError("");
+            await loadData();
+        } catch (error) {
+            setError(error instanceof Error ? error.message : "Could not submit cancellation request.");
+        }
     }
 
     async function signOut() {
@@ -98,13 +121,38 @@ function Employee() {
                         <option value="">Select account</option>
                         {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </select>
+
                     <label>From</label>
                     <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
                            style={{ display: "block", width: "100%", padding: 8, margin: "6px 0 12px" }} />
+
                     <label>To</label>
                     <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
                            style={{ display: "block", width: "100%", padding: 8, margin: "6px 0 12px" }} />
-                    <button onClick={submitRequest} disabled={!accounts.length}>Submit request</button>
+
+                    <button onClick={submitRequest} disabled={!accounts.length}>Submit holiday request</button>
+
+                    <hr style={{ margin: "20px 0" }} />
+
+                    <h3>Request holiday cancellation</h3>
+                    <label>Approved holiday</label>
+                    <select
+                        value={cancellationId}
+                        onChange={e => setCancellationId(e.target.value)}
+                        style={{ display: "block", width: "100%", padding: 9, margin: "8px 0 16px" }}
+                    >
+                        <option value="">Select approved holiday</option>
+                        {approvedHolidays.map(r => (
+                            <option key={r.id} value={r.id}>
+                                {r.account}: {r.startDate} – {r.endDate}
+                            </option>
+                        ))}
+                    </select>
+
+                    <button onClick={submitCancellation} disabled={!approvedHolidays.length}>
+                        Submit cancellation request
+                    </button>
+
                     {error && <p style={{ color: "red" }}>{error}</p>}
                 </div>
 
@@ -165,6 +213,7 @@ function Employee() {
                                         const date = dateKey(i + 1);
                                         const hasHoliday = approved.some(r =>
                                             r.employeeId === employee.id &&
+                                            (r.type ?? "Holiday") === "Holiday" &&
                                             r.startDate <= date && r.endDate >= date
                                         );
 
@@ -188,7 +237,7 @@ function Employee() {
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                         <thead>
                         <tr>
-                            {["Account", "Dates", "Status", "Submitted", "Decision"].map(x =>
+                            {["Type", "Account", "Dates", "Status", "Submitted", "Decision"].map(x =>
                                 <th key={x} style={{ ...cell, textAlign: "left" }}>{x}</th>
                             )}
                         </tr>
@@ -196,13 +245,19 @@ function Employee() {
                         <tbody>
                         {history.map(r => (
                             <tr key={r.id}>
-                                {[r.account, `${r.startDate} – ${r.endDate}`, r.status,
-                                    r.submittedDate, r.decisionDate || "—"].map((x, i) =>
+                                {[
+                                    r.type ?? "Holiday",
+                                    r.account,
+                                    `${r.startDate} – ${r.endDate}`,
+                                    r.status,
+                                    r.submittedDate,
+                                    r.decisionDate || "—"
+                                ].map((x, i) =>
                                     <td key={i} style={{ ...cell, textAlign: "left" }}>{x}</td>
                                 )}
                             </tr>
                         ))}
-                        {!history.length && <tr><td colSpan={5} style={cell}>No requests yet.</td></tr>}
+                        {!history.length && <tr><td colSpan={6} style={cell}>No requests yet.</td></tr>}
                         </tbody>
                     </table>
                 </div>

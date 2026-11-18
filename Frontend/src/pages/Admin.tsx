@@ -3,16 +3,29 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
     getUsers, getCurrentUser, deleteUser,
-    sendAnnouncement, getAnnouncements, type MockUser, type Announcement
+    sendAnnouncement, getAnnouncements, getScheduleHistory,
+    type MockUser, type Announcement, type ScheduleChange, type WeeklySchedule
 } from "../mockApi";
 import CreateEmployee from "./CreateEmployee";
 
 type AdminUser = Omit<MockUser, "password">;
 
+const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"] as const;
+
+function formatSchedule(schedule?: WeeklySchedule) {
+    if (!schedule) return "Not set";
+
+    return days.map(day =>
+        `${day}: ${schedule[day].from}–${schedule[day].to}`
+    ).join("\n");
+}
+
 function Admin() {
     const [users, setUsers] = useState<AdminUser[]>([]);
     const [currentUserId, setCurrentUserId] = useState<number | null>(null);
     const [selectedUser, setSelectedUser] = useState<AdminUser | undefined>();
+    const [historyUser, setHistoryUser] = useState<AdminUser | undefined>();
+    const [history, setHistory] = useState<ScheduleChange[]>([]);
     const [showModal, setShowModal] = useState(false);
     const [refresh, setRefresh] = useState(0);
     const [message, setMessage] = useState("");
@@ -39,6 +52,11 @@ function Admin() {
     const closeModal = () => {
         setShowModal(false);
         setSelectedUser(undefined);
+    };
+
+    const openHistory = async (user: AdminUser) => {
+        setHistoryUser(user);
+        setHistory(await getScheduleHistory(user.id));
     };
 
     const handleDelete = async (id: number) => {
@@ -68,12 +86,13 @@ function Admin() {
         <div className="dashboard">
             <div className="header">
                 <h1>Admin Dashboard</h1>
-                <button onClick={() => navigate("/login")}>Sign out</button>
+                <div>
+                    <button onClick={() => setShowModal(true)}>
+                        Create Employee Account
+                    </button>
+                    <button onClick={() => navigate("/login")}>Sign out</button>
+                </div>
             </div>
-
-            <button onClick={() => setShowModal(true)}>
-                Create Employee Account
-            </button>
 
             <div className="section">
                 <h2>Announcements</h2>
@@ -90,15 +109,12 @@ function Admin() {
                     Send
                 </button>
 
-                
-
                 {announcements.map(a => (
                     <div key={a.id} style={{ padding: "12px 0", borderBottom: "1px solid #ddd" }}>
                         <p>{a.message}</p>
                         <small>{a.date}</small>
                     </div>
                 ))}
-                
             </div>
 
             <div className="section">
@@ -111,6 +127,8 @@ function Admin() {
                         <th>Email</th>
                         <th>Role</th>
                         <th>Actions</th>
+                        <th>Working Schedule</th>
+                        <th>Working Schedule History</th>
                     </tr>
                     </thead>
 
@@ -146,6 +164,18 @@ function Admin() {
                                     </button>
                                 )}
                             </td>
+                            <td>
+                                    <pre style={{ margin: 0, fontFamily: "inherit" }}>
+                                        {formatSchedule(user.weeklySchedule)}
+                                    </pre>
+                            </td>
+                            <td>
+                                {user.weeklySchedule ? (
+                                    <button onClick={() => openHistory(user)}>
+                                        Working Schedule History
+                                    </button>
+                                ) : "N/A"}
+                            </td>
                         </tr>
                     ))}
                     </tbody>
@@ -158,6 +188,43 @@ function Admin() {
                     onClose={closeModal}
                     onCreated={() => setRefresh(prev => prev + 1)}
                 />
+            )}
+
+            {historyUser && (
+                <div className="modal-overlay">
+                    <div className="modal">
+                        <h3>{historyUser.name} – Working Schedule History</h3>
+
+                        <table className="table">
+                            <thead>
+                            <tr>
+                                <th>Working Schedule (Time)</th>
+                                <th>Working Schedule (Date)</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {[...history].reverse().map(change => (
+                                <tr key={change.id}>
+                                    <td>
+                                            <pre style={{ margin: 0, fontFamily: "inherit" }}>
+                                                {formatSchedule(change.schedule)}
+                                            </pre>
+                                    </td>
+                                    <td>{change.date}</td>
+                                </tr>
+                            ))}
+                            </tbody>
+                        </table>
+
+                        {!history.length && <p>No working schedule history available.</p>}
+
+                        <div className="modal-buttons">
+                            <button onClick={() => setHistoryUser(undefined)}>
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
