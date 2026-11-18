@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -14,10 +13,7 @@ const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"] as const;
 
 function formatSchedule(schedule?: WeeklySchedule) {
     if (!schedule) return "Not set";
-
-    return days.map(day =>
-        `${day}: ${schedule[day].from}–${schedule[day].to}`
-    ).join("\n");
+    return days.map(day => `${day}: ${schedule[day].from}–${schedule[day].to}`).join("\n");
 }
 
 function Admin() {
@@ -34,15 +30,12 @@ function Admin() {
     const navigate = useNavigate();
 
     useEffect(() => {
-        const loadUsers = async () => {
-            const userList = await getUsers();
-            const currentUser = await getCurrentUser();
-
+        async function loadUsers() {
+            const [userList, currentUser] = await Promise.all([getUsers(), getCurrentUser()]);
             setUsers(userList);
             setCurrentUserId(currentUser?.id ?? null);
-        };
-
-        loadUsers();
+        }
+        void loadUsers();
     }, [refresh]);
 
     useEffect(() => {
@@ -85,41 +78,17 @@ function Admin() {
     return (
         <div className="dashboard">
             <div className="header">
-                <h1>Admin Dashboard</h1>
+                <h1>Admin</h1>
                 <div>
-                    <button onClick={() => setShowModal(true)}>
+                    <button className="admin-button" onClick={() => setShowModal(true)}>
                         Create Employee Account
                     </button>
-                    <button onClick={() => navigate("/login")}>Sign out</button>
+                    <button className="admin-button" onClick={() => navigate("/login")}>Sign out</button>
                 </div>
             </div>
 
             <div className="section">
-                <h2>Announcements</h2>
-
-                <textarea
-                    value={message}
-                    onChange={e => setMessage(e.target.value)}
-                    placeholder="Write a message to all employees..."
-                    rows={4}
-                    style={{ width: "100%", padding: 10, boxSizing: "border-box" }}
-                />
-
-                <button onClick={handleSend} disabled={!message.trim()}>
-                    Send
-                </button>
-
-                {announcements.map(a => (
-                    <div key={a.id} style={{ padding: "12px 0", borderBottom: "1px solid #ddd" }}>
-                        <p>{a.message}</p>
-                        <small>{a.date}</small>
-                    </div>
-                ))}
-            </div>
-
-            <div className="section">
                 <h2>User Management</h2>
-
                 <table className="table">
                     <thead>
                     <tr>
@@ -131,7 +100,6 @@ function Admin() {
                         <th>Working Schedule History</th>
                     </tr>
                     </thead>
-
                     <tbody>
                     {users.map(user => (
                         <tr key={user.id}>
@@ -143,23 +111,17 @@ function Admin() {
                                     </span>
                             </td>
                             <td>
-                                <button
-                                    className="edit"
-                                    onClick={() => {
-                                        setSelectedUser(user);
-                                        setShowModal(true);
-                                    }}
-                                >
+                                <button className="edit" onClick={() => {
+                                    setSelectedUser(user);
+                                    setShowModal(true);
+                                }}>
                                     Edit
                                 </button>
 
                                 {user.id === currentUserId ? (
                                     <span className="current">Current User</span>
                                 ) : (
-                                    <button
-                                        className="delete"
-                                        onClick={() => handleDelete(user.id)}
-                                    >
+                                    <button className="delete" onClick={() => handleDelete(user.id)}>
                                         Delete
                                     </button>
                                 )}
@@ -171,7 +133,7 @@ function Admin() {
                             </td>
                             <td>
                                 {user.weeklySchedule ? (
-                                    <button onClick={() => openHistory(user)}>
+                                    <button className="admin-button" onClick={() => openHistory(user)}>
                                         Working Schedule History
                                     </button>
                                 ) : "N/A"}
@@ -180,6 +142,27 @@ function Admin() {
                     ))}
                     </tbody>
                 </table>
+            </div>
+
+            <div className="section">
+                <h2>Announcements</h2>
+                <textarea
+                    value={message}
+                    onChange={e => setMessage(e.target.value)}
+                    placeholder="Write a message to all employees..."
+                    rows={4}
+                    style={{ width: "100%", padding: 10, boxSizing: "border-box" }}
+                />
+                <button className="admin-button" onClick={handleSend} disabled={!message.trim()}>
+                    Send Announcement
+                </button>
+
+                {announcements.map(a => (
+                    <div key={a.id} style={{ padding: "12px 0", borderBottom: "1px solid #ddd" }}>
+                        <p>{a.message}</p>
+                        <small>{a.date}</small>
+                    </div>
+                ))}
             </div>
 
             {showModal && (
@@ -194,7 +177,6 @@ function Admin() {
                 <div className="modal-overlay">
                     <div className="modal">
                         <h3>{historyUser.name} – Working Schedule History</h3>
-
                         <table className="table">
                             <thead>
                             <tr>
@@ -219,7 +201,7 @@ function Admin() {
                         {!history.length && <p>No working schedule history available.</p>}
 
                         <div className="modal-buttons">
-                            <button onClick={() => setHistoryUser(undefined)}>
+                            <button className="admin-button" onClick={() => setHistoryUser(undefined)}>
                                 Close
                             </button>
                         </div>

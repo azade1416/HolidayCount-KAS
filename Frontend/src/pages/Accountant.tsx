@@ -183,7 +183,7 @@ function Accountant() {
                             </div>
                         </div>
                         <div style={{ textAlign: "right", marginTop: 20 }}>
-                            <button onClick={() => setShowCalendar(false)}>Close</button>
+                            
                         </div>
                     </div>
                 </div>
@@ -220,7 +220,7 @@ function Accountant() {
                             </table>
                         </div>
                         <div style={{ textAlign: "right", marginTop: 20 }}>
-                            <button onClick={() => setSelectedEmployee(null)}>Close</button>
+                            
                         </div>
                     </div>
                 </div>
