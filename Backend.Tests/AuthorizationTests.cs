@@ -38,4 +38,17 @@ public class AuthorizationTests : IClassFixture<ApiFactory>
         // Assert: valid token, wrong role
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
+    [Fact]
+    public async Task Accountant_can_list_users()
+    {
+        // Arrange: a logged-in accountant
+        var token = await _factory.TokenForNewUser("accountant");
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act
+        var response = await _client.GetAsync("/api/auth/users");
+
+        // Assert: allowed role gets the list
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
 }
