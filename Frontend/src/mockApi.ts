@@ -1,92 +1,32 @@
 
-import type { Employee, HolidayRequest } from "./employee";
+import type {
+    Employee,
+    HolidayRequest,
+    Weekday,
+    RequestType,
+    WeeklySchedule,
+    ScheduleChange,
+    MockHolidayAccount,
+    MockRequest
+} from "./employee";
 
-export type SystemRole = "Employee" | "Accountant" | "Admin";
-export type Weekday = "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday";
-export type RequestType = "Holiday" | "Cancellation";
+import type {
+    SystemRole,
+    MockUser,
+    PublicUser,
+    CreateEmployeeData
+} from "./admin";
+
+import type {
+    AccountantRequest,
+    Announcement
+} from "./accountant";
 
 export const SYSTEM_ROLES: SystemRole[] = ["Employee", "Accountant", "Admin"];
 export const WORKDAYS: Weekday[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 export const CALENDAR_WEEKDAYS = [...WORKDAYS, "Saturday", "Sunday"] as const;
 export const EMPLOYMENT_TYPES = ["Full-time employee", "Part-time employee"] as const;
 export const DEFAULT_EMPLOYMENT_TYPE = EMPLOYMENT_TYPES[0];
-
-export interface DailySchedule {
-    from: string;
-    to: string;
-}
-
-export type WeeklySchedule = Record<Weekday, DailySchedule>;
-
-export interface ScheduleChange {
-    id: number;
-    date: string;
-    previousSchedule: WeeklySchedule;
-    newSchedule: WeeklySchedule;
-}
-
-export interface MockUser {
-    id: number;
-    name: string;
-    email: string;
-    password: string;
-    role: SystemRole;
-    employmentType?: string;
-    weeklySchedule?: WeeklySchedule;
-}
-
-export interface PublicUser {
-    id: number;
-    name: string;
-    email: string;
-    role: SystemRole;
-    employmentType?: string;
-    weeklySchedule?: WeeklySchedule;
-}
-
-export interface MockHolidayBalance {
-    hours: number;
-}
-
-export interface MockHolidayAccount {
-    id: number;
-    employeeId: number;
-    name: string;
-    accrued: MockHolidayBalance;
-    used: MockHolidayBalance;
-    remaining: MockHolidayBalance;
-    eligibleDate: string;
-}
-
-export interface MockRequest extends HolidayRequest {
-    employeeId: number;
-    employee: string;
-    type: RequestType;
-    originalRequestId?: number;
-}
-
-export interface CreateEmployeeData {
-    name: string;
-    email: string;
-    password: string;
-    employmentType: string;
-    weeklySchedule?: WeeklySchedule;
-}
-
-export interface AccountantRequest {
-    id: string;
-    employee: string;
-    dates: string;
-    status: string;
-    submittedDate: string;
-    type: RequestType;
-}
-
-export interface Announcement {
-    id: number;
-    message: string;
-    date: string;
-}
 
 // Default data
 export function createDefaultSchedule(): WeeklySchedule {
