@@ -5,6 +5,12 @@ export type SystemRole = "Employee" | "Accountant" | "Admin";
 export type Weekday = "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday";
 export type RequestType = "Holiday" | "Cancellation";
 
+export const SYSTEM_ROLES: SystemRole[] = ["Employee", "Accountant", "Admin"];
+export const WORKDAYS: Weekday[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+export const CALENDAR_WEEKDAYS = [...WORKDAYS, "Saturday", "Sunday"] as const;
+export const EMPLOYMENT_TYPES = ["Full-time employee", "Part-time employee"] as const;
+export const DEFAULT_EMPLOYMENT_TYPE = EMPLOYMENT_TYPES[0];
+
 export interface DailySchedule {
     from: string;
     to: string;
@@ -24,6 +30,15 @@ export interface MockUser {
     name: string;
     email: string;
     password: string;
+    role: SystemRole;
+    employmentType?: string;
+    weeklySchedule?: WeeklySchedule;
+}
+
+export interface PublicUser {
+    id: number;
+    name: string;
+    email: string;
     role: SystemRole;
     employmentType?: string;
     weeklySchedule?: WeeklySchedule;
@@ -74,11 +89,13 @@ export interface Announcement {
 }
 
 // Default data
-const weekdays: Weekday[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+export function createDefaultSchedule(): WeeklySchedule {
+    return Object.fromEntries(
+        WORKDAYS.map(day => [day, { from: "08:00", to: "16:00" }])
+    ) as WeeklySchedule;
+}
 
-const defaultSchedule = Object.fromEntries(
-    weekdays.map(day => [day, { from: "08:00", to: "16:00" }])
-) as WeeklySchedule;
+const defaultSchedule = createDefaultSchedule();
 
 const accountTemplates = ["Weeks 1–5", "Week 6"];
 
@@ -179,7 +196,7 @@ export async function login(
     return user ? { ...user } : null;
 }
 
-export async function getCurrentUser(): Promise<Omit<MockUser, "password"> | null> {
+export async function getCurrentUser(): Promise<PublicUser | null> {
     if (!loggedInUser) return null;
 
     const { password, ...user } = loggedInUser;
@@ -191,7 +208,7 @@ export async function logout(): Promise<void> {
 }
 
 // User management
-export async function getUsers(): Promise<Omit<MockUser, "password">[]> {
+export async function getUsers(): Promise<PublicUser[]> {
     return users.map(({ password, ...user }) => user);
 }
 

@@ -6,14 +6,14 @@ import {
     getApprovedHolidayRequests, getEmployees,
     approveRequest, rejectRequest, logout
 } from "../mockApi";
-import type { AccountantRequest, MockRequest, MockUser, MockHolidayAccount } from "../mockApi";
+import type { AccountantRequest, MockRequest, PublicUser, MockHolidayAccount } from "../mockApi";
 import type { Employee as EmployeeType } from "../employee";
 
 function Accountant() {
     const [requests, setRequests] = useState<AccountantRequest[]>([]);
     const [history, setHistory] = useState<MockRequest[]>([]);
-    const [users, setUsers] = useState<Omit<MockUser, "password">[]>([]);
-    const [selectedEmployee, setSelectedEmployee] = useState<Omit<MockUser, "password"> | null>(null);
+    const [users, setUsers] = useState<PublicUser[]>([]);
+    const [selectedEmployee, setSelectedEmployee] = useState<PublicUser | null>(null);
     const [accounts, setAccounts] = useState<MockHolidayAccount[]>([]);
     const [approved, setApproved] = useState<MockRequest[]>([]);
     const [employees, setEmployees] = useState<EmployeeType[]>([]);

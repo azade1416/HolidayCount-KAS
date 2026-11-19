@@ -3,24 +3,20 @@ import { useNavigate } from "react-router-dom";
 import {
     getUsers, getCurrentUser, deleteUser,
     sendAnnouncement, getAnnouncements, getScheduleHistory,
-    type MockUser, type Announcement, type ScheduleChange, type WeeklySchedule
+    type PublicUser, type Announcement, type ScheduleChange, type WeeklySchedule, WORKDAYS
 } from "../mockApi";
 import CreateEmployee from "./CreateEmployee";
 
-type AdminUser = Omit<MockUser, "password">;
-
-const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"] as const;
-
 function formatSchedule(schedule?: WeeklySchedule) {
     if (!schedule) return "Not set";
-    return days.map(day => `${day}: ${schedule[day].from}–${schedule[day].to}`).join("\n");
+    return WORKDAYS.map(day => `${day}: ${schedule[day].from}–${schedule[day].to}`).join("\n");
 }
 
 function Admin() {
-    const [users, setUsers] = useState<AdminUser[]>([]);
+    const [users, setUsers] = useState<PublicUser[]>([]);
     const [currentUserId, setCurrentUserId] = useState<number | null>(null);
-    const [selectedUser, setSelectedUser] = useState<AdminUser | undefined>();
-    const [historyUser, setHistoryUser] = useState<AdminUser | undefined>();
+    const [selectedUser, setSelectedUser] = useState<PublicUser | undefined>();
+    const [historyUser, setHistoryUser] = useState<PublicUser | undefined>();
     const [history, setHistory] = useState<ScheduleChange[]>([]);
     const [showModal, setShowModal] = useState(false);
     const [refresh, setRefresh] = useState(0);
@@ -47,7 +43,7 @@ function Admin() {
         setSelectedUser(undefined);
     };
 
-    const openHistory = async (user: AdminUser) => {
+    const openHistory = async (user: PublicUser) => {
         setHistoryUser(user);
         setHistory(await getScheduleHistory(user.id));
     };
@@ -189,7 +185,7 @@ function Admin() {
                                 <tr key={change.id}>
                                     <td>
                                             <pre style={{ margin: 0, fontFamily: "inherit" }}>
-                                                {formatSchedule(change.schedule)}
+                                                {formatSchedule(change.newSchedule)}
                                             </pre>
                                     </td>
                                     <td>{change.date}</td>

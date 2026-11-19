@@ -1,31 +1,24 @@
 
 import { useState } from "react";
 import {
-    createEmployee, updateUser,
-    type WeeklySchedule, type MockUser
+    createEmployee, updateUser, createDefaultSchedule, WORKDAYS, EMPLOYMENT_TYPES,
+    DEFAULT_EMPLOYMENT_TYPE,
+    type WeeklySchedule, type PublicUser
 } from "../mockApi";
 
-const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"] as const;
-
-const defaultSchedule = Object.fromEntries(
-    days.map(day => [day, { from: "08:00", to: "16:00" }])
-) as WeeklySchedule;
-
 type Props = {
-    user?: Omit<MockUser, "password">;
+    user?: PublicUser;
     onClose: () => void;
     onCreated: () => void;
 };
 
 function CreateEmployee({ user, onClose, onCreated }: Props) {
-    const [role, setRole] = useState(
-        user?.employmentType || (user?.role === "Employee" ? "Full-time employee" : user?.role || "Full-time employee")
-    );
-    const [schedule, setSchedule] = useState(
-        user?.weeklySchedule || defaultSchedule
-    );
+    const startingRole = user?.employmentType ??
+        (user?.role === "Employee" ? DEFAULT_EMPLOYMENT_TYPE : user?.role ?? DEFAULT_EMPLOYMENT_TYPE);
+    const [role, setRole] = useState(startingRole);
+    const [schedule, setSchedule] = useState(user?.weeklySchedule ?? createDefaultSchedule());
 
-    const isEmployee = ["Full-time employee", "Part-time employee"].includes(role);
+    const isEmployee = role === EMPLOYMENT_TYPES[0] || role === EMPLOYMENT_TYPES[1];
 
     const update = (day: keyof WeeklySchedule, field: "from" | "to", value: string) =>
         setSchedule(prev => ({ ...prev, [day]: { ...prev[day], [field]: value } }));
@@ -36,7 +29,7 @@ function CreateEmployee({ user, onClose, onCreated }: Props) {
         const data = new FormData(e.currentTarget);
         const valid = (time: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
 
-        if (isEmployee && days.some(day =>
+        if (isEmployee && WORKDAYS.some(day =>
             !valid(schedule[day].from) ||
             !valid(schedule[day].to) ||
             schedule[day].from >= schedule[day].to
@@ -102,7 +95,7 @@ function CreateEmployee({ user, onClose, onCreated }: Props) {
 
                     <label>Role</label>
                     <select value={role} onChange={e => setRole(e.target.value)}>
-                        {["Full-time employee", "Part-time employee"].map(r =>
+                        {EMPLOYMENT_TYPES.map(r =>
                             <option key={r}>{r}</option>
                         )}
                     </select>
@@ -117,19 +110,20 @@ function CreateEmployee({ user, onClose, onCreated }: Props) {
                                 <span>To</span>
                             </div>
 
-                            {days.map(day => (
+                            {WORKDAYS.map(day => (
                                 <div className="schedule-row" key={day}>
                                     <strong>{day}</strong>
 
-                                    {(["from", "to"] as const).map(field => (
-                                        <input
-                                            key={field}
-                                            value={schedule[day][field]}
-                                            placeholder={field === "from" ? "08:00" : "16:00"}
-                                            onChange={e => update(day, field, e.target.value)}
-                                            required
-                                        />
-                                    ))}
+                                    <input
+                                        value={schedule[day].from}
+                                        onChange={e => update(day, "from", e.target.value)}
+                                        required
+                                    />
+                                    <input
+                                        value={schedule[day].to}
+                                        onChange={e => update(day, "to", e.target.value)}
+                                        required
+                                    />
                                 </div>
                             ))}
                         </div>

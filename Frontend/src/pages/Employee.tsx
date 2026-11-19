@@ -4,21 +4,20 @@ import { useNavigate } from "react-router-dom";
 import {
     getCurrentUser, getHolidayAccounts, getEmployeeRequestHistory,
     getApprovedHolidayRequests, getEmployees, createHolidayRequest,
-    createCancellationRequest, logout
+    createCancellationRequest, logout, CALENDAR_WEEKDAYS
 } from "../mockApi";
-import type { MockUser, MockHolidayAccount, MockRequest } from "../mockApi";
+import type { PublicUser, MockHolidayAccount, MockRequest, WeeklySchedule } from "../mockApi";
 import type { Employee as EmployeeType } from "../employee";
 
 const cell = { padding: 8, borderBottom: "1px solid #eee", textAlign: "center" as const };
 const card = { background: "white", padding: 14, borderRadius: 8 };
 const button = { padding: "7px 12px", cursor: "pointer" };
-const weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const holidayColor = "#bde8c5";
 const square = { width: 38, height: 38, border: "1px solid #ddd", boxSizing: "border-box" as const };
 
 function Employee() {
     const navigate = useNavigate();
-    const [user, setUser] = useState<Omit<MockUser, "password"> | null>(null);
+    const [user, setUser] = useState<PublicUser | null>(null);
     const [accounts, setAccounts] = useState<MockHolidayAccount[]>([]);
     const [history, setHistory] = useState<MockRequest[]>([]);
     const [approved, setApproved] = useState<MockRequest[]>([]);
@@ -97,21 +96,11 @@ function Employee() {
     const dateKey = (day: number) =>
         `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
-    const schedule = user?.weeklySchedule as unknown as Record<string, unknown> | undefined;
+    const schedule = user?.weeklySchedule;
 
     function getWorkingHours(day: string) {
-        const value = schedule?.[day] ?? schedule?.[day.toLowerCase()];
-        if (!value) return "—";
-        if (typeof value === "string") return value;
-
-        if (typeof value === "object") {
-            const hours = value as Record<string, unknown>;
-            const from = hours.from ?? hours.start ?? hours.startTime;
-            const to = hours.to ?? hours.end ?? hours.endTime;
-            if (from && to) return `${from} – ${to}`;
-            if (hours.hours) return String(hours.hours);
-        }
-        return "—";
+        const hours = schedule?.[day as keyof WeeklySchedule];
+        return hours ? `${hours.from} – ${hours.to}` : "—";
     }
 
     return (
@@ -127,7 +116,7 @@ function Employee() {
                     <label>Holiday account</label>
                     <select value={accountId} onChange={e => setAccountId(e.target.value)}
                             style={{ display: "block", width: "100%", padding: 8, margin: "6px 0 12px" }}>
-                        <option value="">Select account</option>
+                        
                         {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </select>
 
@@ -210,7 +199,7 @@ function Employee() {
                         </tr>
                         </thead>
                         <tbody>
-                        {weekdays.map(day => (
+                        {CALENDAR_WEEKDAYS.map(day => (
                             <tr key={day}>
                                 <td style={{ ...cell, textAlign: "left" }}>{day}</td>
                                 <td style={cell}>{getWorkingHours(day)}</td>
@@ -266,9 +255,7 @@ function Employee() {
                 <div style={{ overflowX: "auto" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                         <thead>
-                        <tr>{["Type", "Account", "Dates", "Status", "Submitted", "Decision"].map(x =>
-                            <th key={x} style={{ ...cell, textAlign: "left" }}>{x}</th>
-                        )}</tr>
+                        <tr>{["Type", "Account", "Dates", "Status", "Submitted", "Decision"].map(x => <th key={x} style={{ ...cell, textAlign: "left" }}>{x}</th>)}</tr>
                         </thead>
                         <tbody>
                         {history.map(r => (
