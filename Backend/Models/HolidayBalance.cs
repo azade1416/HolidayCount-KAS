@@ -22,18 +22,12 @@ public class HolidayBalance
     public DateOnly UsagePeriodStart { get; set; }
     [Column("UsagePeriodEnd")]
     public DateOnly UsagePeriodEnd { get; set; }
-    [Column("EarnedUnits")]
-    public decimal EarnedUnits { get; set; }
-    [Column("UsedUnits")]
-    public decimal UsedUnits { get; set; }
-    [Column("TransferredUnits")]
-    public decimal TransferredUnits { get; set; }
-    [Column("PaidOutUnits")]
-    public decimal PaidOutUnits { get; set; }
-    [Column("QualifyingSalary")]
-    public decimal QualifyingSalary { get; set; }
-    [Column("HolidaySupplementAmount")]
-    public decimal HolidaySupplementAmount { get; set; }
+    [Column("EarnedHours")]
+    public decimal EarnedHours { get; set; }
+    [Column("UsedHours")]
+    public decimal UsedHours { get; set; }
+    [Column("TransferredHours")]
+    public decimal TransferredHours { get; set; }
 
     [NotColumn]
     public User User { get; set; } = null!;

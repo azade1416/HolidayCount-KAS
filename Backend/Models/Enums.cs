@@ -2,8 +2,8 @@ namespace Backend.Models;
 
 public enum EmploymentType
 {
-    Salaried,
-    Hourly
+    FullTime,
+    PartTime
 }
 
 public enum HolidayAccountType
@@ -18,6 +18,13 @@ public enum LeaveRequestStatus
     Approved,
     Rejected,
     Cancelled
+}
+
+public enum LeaveRequestType
+{
+    Holiday,
+    Cancellation,
+    Transfer
 }
 
 public enum HolidayTransactionType

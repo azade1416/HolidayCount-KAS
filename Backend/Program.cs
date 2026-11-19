@@ -12,6 +12,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddScoped<AppDbContext>(_ => new AppDbContext(connectionString));
 
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IHolidayService, HolidayService>();
 
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "DefaultFallbackSecretKey12345";
 var keyBytes = Encoding.UTF8.GetBytes(jwtKey);

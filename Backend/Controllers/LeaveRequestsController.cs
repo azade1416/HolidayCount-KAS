@@ -10,187 +10,146 @@ using Microsoft.AspNetCore.Mvc;
 namespace Backend.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/leave-requests")]
 [Authorize]
 public class LeaveRequestsController : ControllerBase
 {
-    private readonly AppDbContext _context;
-    private readonly ITokenService _tokenService;
+    private readonly AppDbContext _db;
+    private readonly ITokenService _tokens;
+    private readonly IHolidayService _holidays;
 
-    public LeaveRequestsController(AppDbContext context, ITokenService tokenService)
+    public LeaveRequestsController(AppDbContext db, ITokenService tokens, IHolidayService holidays)
     {
-        _context = context;
-        _tokenService = tokenService;
+        _db = db;
+        _tokens = tokens;
+        _holidays = holidays;
     }
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateLeaveRequestDto dto)
     {
-        var currentUser = await _tokenService.ValidateAndGetUserAsync(User);
-        if (currentUser == null)
+        var user = await _tokens.ValidateAndGetUserAsync(User);
+        if (user == null) return Unauthorized();
+
+        try
         {
-            return Unauthorized(new { message = "User no longer exists or token is invalid." });
+            var result = await _holidays.CreateHolidayAsync(user.Id, dto.AccountId, dto.StartDate, dto.EndDate);
+            return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
         }
-
-        if (!currentUser.IsActive)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden,
-                new { message = "Inactive users cannot submit leave requests." });
-        }
-
-        var leaveRequest = new LeaveRequest
-        {
-            UserId = currentUser.Id,
-            AccountType = dto.AccountType,
-            StartDate = dto.StartDate,
-            EndDate = dto.EndDate,
-            RequestedDays = dto.RequestedDays,
-            RequestedHours = dto.RequestedHours,
-            IsMainHoliday = dto.IsMainHoliday,
-            Reason = string.IsNullOrWhiteSpace(dto.Reason) ? null : dto.Reason.Trim()
-        };
-
-        await _context.InsertAsync(leaveRequest);
-
-        return CreatedAtAction(
-            nameof(GetById),
-            new { id = leaveRequest.Id },
-            leaveRequest);
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return Conflict(new { message = ex.Message }); }
     }
-    
-    [HttpPut("leaverequests/{guid}")]
-    public async Task<IActionResult> CancelLeaveRequest(Guid guid)
+
+    [HttpPost("{id:guid}/cancel")]
+    public async Task<IActionResult> Cancel(Guid id)
     {
-        var currentUser = await _tokenService.ValidateAndGetUserAsync(User);
-        if (currentUser == null)
+        var user = await _tokens.ValidateAndGetUserAsync(User);
+        if (user == null) return Unauthorized();
+        try
         {
-            return Unauthorized(new { message = "User no longer exists or token is invalid." });
+            var result = await _holidays.CreateCancellationAsync(user.Id, id);
+            return StatusCode(201, result);
         }
-        if (currentUser.Role != "employee")
-        {
-            return StatusCode(StatusCodes.Status403Forbidden,
-                new { message = "Only employees can cancel leave requests." });
-        }
-
-        var leaveRequest = await _context.LeaveRequests.FirstOrDefaultAsync(lr => lr.Id == guid && lr.UserId == currentUser.Id);
-
-        if (leaveRequest == null)
-        {
-            return NotFound(new { message = "Leave request not found." });
-        }
-
-        if (leaveRequest.Status != LeaveRequestStatus.Pending)
-        {
-            return BadRequest(new { message = "Only pending leave requests can be cancelled." });
-        }
-
-        leaveRequest.Status = LeaveRequestStatus.Cancelled;
-        leaveRequest.ReviewedAtUtc = DateTime.UtcNow;
-        leaveRequest.ReviewedByUserId = currentUser.Id;
-
-        await _context.UpdateAsync(leaveRequest);
-
-        return Ok(new { message = "Leave request cancelled successfully." });
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return Conflict(new { message = ex.Message }); }
     }
 
-    [HttpGet]
-    public async Task<IActionResult> GetMine()
+    [HttpPost("{id:guid}/approve")]
+    [Authorize(Roles = "accountant,admin")]
+    public async Task<IActionResult> Approve(Guid id)
     {
-        var currentUser = await _tokenService.ValidateAndGetUserAsync(User);
-        if (currentUser == null)
+        var reviewer = await _tokens.ValidateAndGetUserAsync(User);
+        if (reviewer == null) return Unauthorized();
+
+        var existing = await _db.LeaveRequests.FirstOrDefaultAsync(x => x.Id == id);
+        if (existing == null) return NotFound();
+        if (existing.Status != LeaveRequestStatus.Pending)
+            return Conflict(new { message = "Only pending requests can be approved." });
+
+        try
         {
-            return Unauthorized(new { message = "User no longer exists or token is invalid." });
+            var result = await _holidays.ApproveAsync(id, reviewer.Id);
+            return result == null ? Conflict() : Ok(result);
         }
-
-        var requests = await _context.LeaveRequests
-            .Where(request => request.UserId == currentUser.Id)
-            .OrderByDescending(request => request.SubmittedAtUtc)
-            .ToListAsync();
-
-        return Ok(requests);
+        catch (InvalidOperationException ex) { return Conflict(new { message = ex.Message }); }
     }
+
+    [HttpPost("{id:guid}/reject")]
+    [Authorize(Roles = "accountant,admin")]
+    public async Task<IActionResult> Reject(Guid id, [FromBody] RejectLeaveRequestDto? dto)
+    {
+        var reviewer = await _tokens.ValidateAndGetUserAsync(User);
+        if (reviewer == null) return Unauthorized();
+        var existing = await _db.LeaveRequests.FirstOrDefaultAsync(x => x.Id == id);
+        if (existing == null) return NotFound();
+        if (existing.Status != LeaveRequestStatus.Pending)
+            return Conflict(new { message = "Only pending requests can be rejected." });
+
+        var result = await _holidays.RejectAsync(id, reviewer.Id, dto?.Reason);
+        return Ok(result);
+    }
+
+    [HttpPost("transfer")]
+    public async Task<IActionResult> Transfer([FromBody] CreateTransferDto dto)
+    {
+        var user = await _tokens.ValidateAndGetUserAsync(User);
+        if (user == null) return Unauthorized();
+        if (!dto.WrittenAgreement)
+            return BadRequest(new { message = "Written agreement is required." });
+
+        try
+        {
+            var result = await _holidays.CreateTransferAsync(user.Id, dto.AccountId, dto.Hours);
+            return StatusCode(201, result);
+        }
+        catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (InvalidOperationException ex) { return Conflict(new { message = ex.Message }); }
+    }
+
+    [HttpGet("pending")]
+    [Authorize(Roles = "accountant,admin")]
+    public async Task<IActionResult> Pending()
+        => Ok(await _db.LeaveRequests.Where(x => x.Status == LeaveRequestStatus.Pending)
+            .OrderByDescending(x => x.SubmittedAtUtc).ToListAsync());
+
+    [HttpGet("history")]
+    [Authorize(Roles = "accountant,admin")]
+    public async Task<IActionResult> History()
+        => Ok(await _db.LeaveRequests.Where(x => x.Status != LeaveRequestStatus.Pending)
+            .OrderByDescending(x => x.SubmittedAtUtc).ToListAsync());
+
+    [HttpGet("approved-holidays")]
+    public async Task<IActionResult> ApprovedHolidays()
+        => Ok(await _db.LeaveRequests.Where(x =>
+            x.Status == LeaveRequestStatus.Approved
+            && x.RequestType == LeaveRequestType.Holiday)
+            .OrderBy(x => x.StartDate).ToListAsync());
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {
-        var currentUser = await _tokenService.ValidateAndGetUserAsync(User);
-        if (currentUser == null)
-        {
-            return Unauthorized(new { message = "User no longer exists or token is invalid." });
-        }
-
-        var request = await _context.LeaveRequests.FirstOrDefaultAsync(item => item.Id == id && item.UserId == currentUser.Id);
-
-        return request == null ? NotFound() : Ok(request);
+        var user = await _tokens.ValidateAndGetUserAsync(User);
+        if (user == null) return Unauthorized();
+        var request = await _db.LeaveRequests.FirstOrDefaultAsync(x => x.Id == id);
+        if (request == null) return NotFound();
+        if (user.Role == "employee" && request.UserId != user.Id) return Forbid();
+        return Ok(request);
     }
-    
-    
-    
-    [HttpPut("leaverequests/{guid}")]
-    public async Task<IActionResult> ApproveLeaveRequest(Guid guid)
+
+    [HttpGet]
+    public async Task<IActionResult> Mine()
     {
-        var currentUser = await _tokenService.ValidateAndGetUserAsync(User);
-        if (currentUser == null)
-        {
-            return Unauthorized(new { message = "User no longer exists or token is invalid." });
-        }
-        if (currentUser.Role != "accountant")
-        {
-            return StatusCode(StatusCodes.Status403Forbidden,
-                new { message = "Only accountants can approve leave requests." });
-        }
-
-        var leaveRequest = await _context.LeaveRequests.FirstOrDefaultAsync(lr => lr.Id == guid && lr.UserId == currentUser.Id);
-
-        if (leaveRequest == null)
-        {
-            return NotFound(new { message = "Leave request not found." });
-        }
-
-        if (leaveRequest.Status != LeaveRequestStatus.Pending)
-        {
-            return BadRequest(new { message = "Only pending leave requests can be approved." });
-        }
-
-        leaveRequest.Status = LeaveRequestStatus.Approved;
-        leaveRequest.ReviewedAtUtc = DateTime.UtcNow;
-        leaveRequest.ReviewedByUserId = currentUser.Id;
-
-        await _context.UpdateAsync(leaveRequest);
-        return Ok(new { message = "Leave request approved successfully." });
+        var user = await _tokens.ValidateAndGetUserAsync(User);
+        if (user == null) return Unauthorized();
+        return Ok(await _db.LeaveRequests.Where(x => x.UserId == user.Id)
+            .OrderByDescending(x => x.SubmittedAtUtc).ToListAsync());
     }
-    
-    [HttpPut("leaverequests/{guid}")]
-    public async Task<IActionResult> RejectLeaveRequest(Guid guid)
-    {
-        var currentUser = await _tokenService.ValidateAndGetUserAsync(User);
-        if (currentUser == null)
-        {
-            return Unauthorized(new { message = "User no longer exists or token is invalid." });
-        }
-        if (currentUser.Role != "accountant")
-        {
-            return StatusCode(StatusCodes.Status403Forbidden,
-                new { message = "Only accountants can reject leave requests." });
-        }
 
-        var leaveRequest = await _context.LeaveRequests.FirstOrDefaultAsync(lr => lr.Id == guid && lr.UserId == currentUser.Id);
-
-        if (leaveRequest == null)
-        {
-            return NotFound(new { message = "Leave request not found." });
-        }
-
-        if (leaveRequest.Status != LeaveRequestStatus.Pending)
-        {
-            return BadRequest(new { message = "Only pending leave requests can be rejected." });
-        }
-
-        leaveRequest.Status = LeaveRequestStatus.Rejected;
-        leaveRequest.ReviewedAtUtc = DateTime.UtcNow;
-        leaveRequest.ReviewedByUserId = currentUser.Id;
-
-        await _context.UpdateAsync(leaveRequest);
-        return Ok(new { message = "Leave request rejected successfully." });
-    }
+    [HttpGet("/api/employees/{employeeId:guid}/leave-requests")]
+    [Authorize(Roles = "accountant,admin")]
+    public async Task<IActionResult> ForEmployee(Guid employeeId)
+        => Ok(await _db.LeaveRequests.Where(x => x.UserId == employeeId)
+            .OrderByDescending(x => x.SubmittedAtUtc).ToListAsync());
 }

@@ -26,11 +26,12 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == dto.Username);
+        var email = dto.Email.Trim();
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
         
         if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
         {
-            return Unauthorized(new { message = "Invalid username or password" });
+            return Unauthorized(new { message = "Invalid email or password" });
         }
         var token = _authService.GenerateToken(user);
 
@@ -38,11 +39,31 @@ public class AuthController : ControllerBase
         { 
             message = "Login successful", 
             token = token, 
-            name = user.Fullname,
-            username = user.Username, 
+            name = user.FullName,
+            email = user.Email,
             role = user.Role 
         });
     }
+
+    [HttpGet("me")]
+    [Authorize]
+    public async Task<IActionResult> Me()
+    {
+        var user = await _authService.ValidateAndGetUserAsync(User);
+        if (user == null) return Unauthorized();
+        return Ok(new
+        {
+            user.Id,
+            name = user.FullName,
+            email = user.Email,
+            role = user.Role,
+            employmentType = user.EmploymentType.ToString()
+        });
+    }
+
+    [HttpPost("logout")]
+    [Authorize]
+    public IActionResult Logout() => NoContent();
     
     [HttpGet("users")]
     [Authorize] 
@@ -54,7 +75,7 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = "User no longer exists or token is invalid" });
         }
         
-        var users = await _context.Users.Select(u => new { u.Id, u.Fullname, u.Username, u.Role }).ToListAsync();
+        var users = await _context.Users.Select(u => new { u.Id, u.FullName, u.Email, u.Role, u.EmploymentType }).ToListAsync();
         return Ok(users);
     }
     
@@ -72,9 +93,9 @@ public class AuthController : ControllerBase
         {
             return StatusCode(403, new { message = "Only administrators can manage users." });
         }
-        if (await _context.Users.AnyAsync(u => u.Username == dto.Username))
+        if (await _context.Users.AnyAsync(u => u.Email == dto.Email))
         {
-            return BadRequest(new { message = "Username is already taken" });
+            return BadRequest(new { message = "Email is already taken" });
         }
         
         string targetRole = string.IsNullOrWhiteSpace(dto.Role) ? "employee" : dto.Role.Trim().ToLowerInvariant();
@@ -86,15 +107,16 @@ public class AuthController : ControllerBase
         string passwordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
         var user = new User
         {
-            Fullname = dto.FullName,
-            Username = dto.Username,
+            FullName = dto.FullName,
+            Email = dto.Email,
             PasswordHash = passwordHash,
             Role = targetRole
         };
 
         await _context.InsertAsync(user);
 
-        return Ok(new { message = "User created successfully", id = user.Id, username = user.Username, role = user.Role });
+        await InsertScheduleAsync(user, dto.WorkSchedule);
+        return StatusCode(201, new { message = "User created successfully", id = user.Id, email = user.Email, role = user.Role });
     }
     
     [HttpPut("users/{id}")]
@@ -118,16 +140,7 @@ public class AuthController : ControllerBase
         }
         
         if (!string.IsNullOrEmpty(dto.FullName))
-            targetUser.Fullname = dto.FullName;
-
-        if (!string.IsNullOrEmpty(dto.Username))
-        {
-            if (await _context.Users.AnyAsync(u => u.Username == dto.Username && u.Id != id))
-            {
-                return BadRequest(new { message = "Username is already taken" });
-            }
-            targetUser.Username = dto.Username;
-        }
+            targetUser.FullName = dto.FullName;
 
         if (!string.IsNullOrEmpty(dto.Password))
         {
@@ -145,6 +158,16 @@ public class AuthController : ControllerBase
         }
 
         await _context.UpdateAsync(targetUser);
+        if (dto.Email != null)
+        {
+            if (await _context.Users.AnyAsync(u => u.Email == dto.Email && u.Id != id))
+                return BadRequest(new { message = "Email is already taken" });
+            targetUser.Email = dto.Email;
+        }
+        if (dto.Name != null) targetUser.FullName = dto.Name;
+        if (dto.EmploymentType.HasValue) targetUser.EmploymentType = dto.EmploymentType.Value;
+        if (dto.WorkSchedule != null)
+            await ReplaceScheduleAsync(targetUser, dto.WorkSchedule, currentUser.Id);
         return Ok(new { message = "User updated successfully" });
     }
     
@@ -172,5 +195,91 @@ public class AuthController : ControllerBase
         await _context.DeleteAsync(targetUser);
 
         return Ok(new { message = "User deleted successfully" });
+    }
+
+    private async Task InsertScheduleAsync(User user, Dictionary<DayOfWeek, DailyScheduleDto> schedule)
+    {
+        if (user.Role != "employee") return;
+
+        foreach (var item in schedule)
+        {
+            if (!TimeOnly.TryParse(item.Value.From, out var start)
+                || !TimeOnly.TryParse(item.Value.To, out var end)
+                || start >= end)
+                throw new ArgumentException("Invalid working schedule.");
+
+            await _context.InsertAsync(new WorkScheduleEntry
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                DayOfWeek = item.Key,
+                StartTime = start,
+                EndTime = end,
+                EffectiveFrom = DateOnly.FromDateTime(DateTime.UtcNow)
+            });
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        foreach (var accountType in new[] { HolidayAccountType.Weeks1To5, HolidayAccountType.Week6 })
+        {
+            await _context.InsertAsync(new HolidayBalance
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                AccountType = accountType,
+                EarningYear = today.Year,
+                EarningPeriodStart = new DateOnly(today.Year, 9, 1),
+                EarningPeriodEnd = new DateOnly(today.Year + 1, 8, 31),
+                UsagePeriodStart = new DateOnly(today.Year, 9, 1),
+                UsagePeriodEnd = new DateOnly(today.Year + 1, 12, 31)
+            });
+        }
+    }
+
+    private async Task ReplaceScheduleAsync(User user, Dictionary<DayOfWeek, DailyScheduleDto> schedule, Guid changedBy)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var oldEntries = await _context.WorkScheduleEntries
+            .Where(x => x.UserId == user.Id && (x.EffectiveTo == null || x.EffectiveTo >= today))
+            .ToListAsync();
+        var previousJson = System.Text.Json.JsonSerializer.Serialize(oldEntries.Select(x => new
+        {
+            day = x.DayOfWeek,
+            from = x.StartTime.ToString("HH:mm"),
+            to = x.EndTime.ToString("HH:mm")
+        }));
+
+        foreach (var entry in oldEntries)
+        {
+            entry.EffectiveTo = today.AddDays(-1);
+            await _context.UpdateAsync(entry);
+        }
+
+        foreach (var item in schedule)
+        {
+            if (!TimeOnly.TryParse(item.Value.From, out var start)
+                || !TimeOnly.TryParse(item.Value.To, out var end)
+                || start >= end)
+                throw new ArgumentException("Invalid working schedule.");
+
+            await _context.InsertAsync(new WorkScheduleEntry
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                DayOfWeek = item.Key,
+                StartTime = start,
+                EndTime = end,
+                EffectiveFrom = today
+            });
+        }
+
+        await _context.InsertAsync(new ScheduleChange
+        {
+            UserId = user.Id,
+            EffectiveFrom = today,
+            PreviousScheduleJson = previousJson,
+            NewScheduleJson = System.Text.Json.JsonSerializer.Serialize(schedule),
+            CreatedByUserId = changedBy
+        });
     }
 }
