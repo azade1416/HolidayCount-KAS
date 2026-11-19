@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { login, SYSTEM_ROLES } from "../mockApi";
+import { login } from "../mockApi";
 
 function Login() {
     const [email, setEmail] = useState("");
@@ -10,13 +10,7 @@ function Login() {
 
     const handleLogin = async () => {
         try {
-            let user = null;
-
-            for (const role of SYSTEM_ROLES) {
-                user = await login(email, password, role);
-
-                if (user) break;
-            }
+            const user = await login(email, password);
 
             if (!user) {
                 alert("Invalid email or password.");

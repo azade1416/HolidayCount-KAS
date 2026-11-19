@@ -6,7 +6,9 @@ import {
     getApprovedHolidayRequests, getEmployees,
     approveRequest, rejectRequest, logout
 } from "../mockApi";
-import type { AccountantRequest, MockRequest, PublicUser, MockHolidayAccount } from "../mockApi";
+import type { AccountantRequest } from "../accountant";
+import type { MockRequest, MockHolidayAccount } from "../employee";
+import type { PublicUser } from "../admin";
 import type { Employee as EmployeeType } from "../employee";
 
 function Accountant() {
@@ -37,7 +39,7 @@ function Accountant() {
         void loadData();
     }, [refresh]);
 
-    async function openEmployee(id: number) {
+    async function openEmployee(id: string) {
         const employee = users.find(u => u.id === id);
         if (!employee) return;
         setAccounts(await getHolidayAccounts(id));
@@ -46,8 +48,8 @@ function Accountant() {
 
     async function handleDecision(id: string, approve: boolean) {
         try {
-            if (approve) await approveRequest(Number(id));
-            else await rejectRequest(Number(id));
+            if (approve) await approveRequest(id);
+            else await rejectRequest(id);
             setRefresh(prev => prev + 1);
         } catch (error) {
             alert(error instanceof Error ? error.message : "Could not update request.");

@@ -6,7 +6,8 @@ import {
     getApprovedHolidayRequests, getEmployees, createHolidayRequest,
     createCancellationRequest, logout, CALENDAR_WEEKDAYS
 } from "../mockApi";
-import type { PublicUser, MockHolidayAccount, MockRequest, WeeklySchedule } from "../mockApi";
+import type { PublicUser } from "../admin";
+import type { MockHolidayAccount, MockRequest, WeeklySchedule } from "../employee";
 import type { Employee as EmployeeType } from "../employee";
 
 const cell = { padding: 8, borderBottom: "1px solid #eee", textAlign: "center" as const };
@@ -54,7 +55,7 @@ function Employee() {
     );
 
     async function submitRequest() {
-        const account = accounts.find(a => a.id === Number(accountId));
+        const account = accounts.find(a => a.id === accountId);
         if (!user || !account || !startDate || !endDate || endDate < startDate) {
             setError("Please select an account and valid dates.");
             return;
@@ -76,7 +77,7 @@ function Employee() {
             return;
         }
         try {
-            await createCancellationRequest(user.id, user.name, Number(cancellationId));
+            await createCancellationRequest(user.id, user.name, cancellationId);
             setCancellationId("");
             setError("");
             await loadData();

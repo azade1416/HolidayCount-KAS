@@ -4,7 +4,7 @@ import type { WeeklySchedule } from "./employee";
 export type SystemRole = "Employee" | "Accountant" | "Admin";
 
 export interface MockUser {
-    id: number;
+    id: string;
     name: string;
     email: string;
     password: string;
@@ -14,7 +14,7 @@ export interface MockUser {
 }
 
 export interface PublicUser {
-    id: number;
+    id: string;
     name: string;
     email: string;
     role: SystemRole;
@@ -31,7 +31,7 @@ export interface CreateEmployeeData {
 }
 
 export interface Announcement {
-    id: number;
+    id: string;
     message: string;
     date: string;
 }

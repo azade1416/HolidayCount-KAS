@@ -19,7 +19,6 @@ import type {
 
 import type { AccountantRequest } from "./accountant";
 
-export const SYSTEM_ROLES: SystemRole[] = ["Employee", "Accountant", "Admin"];
 export const WORKDAYS: Weekday[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 export const CALENDAR_WEEKDAYS = [...WORKDAYS, "Saturday", "Sunday"] as const;
 export const EMPLOYMENT_TYPES = ["Full-time employee", "Part-time employee"] as const;
@@ -36,9 +35,9 @@ const defaultSchedule = createDefaultSchedule();
 
 const accountTemplates = ["Weeks 1–5", "Week 6"];
 
-const createHolidayAccounts = (employeeId: number): MockHolidayAccount[] =>
+const createHolidayAccounts = (employeeId: string): MockHolidayAccount[] =>
     accountTemplates.map((name, index) => ({
-        id: employeeId * 10 + index + 1,
+        id: `${employeeId}-${index + 1}`,
         employeeId,
         name,
         accrued: { hours: 0 },
@@ -50,7 +49,7 @@ const createHolidayAccounts = (employeeId: number): MockHolidayAccount[] =>
 // Mock database
 let users: MockUser[] = [
     {
-        id: 1,
+        id: "1",
         name: "John Carter",
         email: "john@example.com",
         password: "123456",
@@ -59,14 +58,14 @@ let users: MockUser[] = [
         weeklySchedule: defaultSchedule
     },
     {
-        id: 2,
+        id: "2",
         name: "Accountant",
         email: "accountant@example.com",
         password: "123456",
         role: "Accountant"
     },
     {
-        id: 3,
+        id: "3",
         name: "Admin",
         email: "admin@example.com",
         password: "123456",
@@ -77,35 +76,35 @@ let users: MockUser[] = [
 let loggedInUser: MockUser | null = null;
 
 let employees: Employee[] = [
-    { id: 1, name: "John Carter", role: "Full-time employee" }
+    { id: "1", name: "John Carter", role: "Full-time employee" }
 ];
 
-let holidayAccounts: MockHolidayAccount[] = createHolidayAccounts(1);
+let holidayAccounts: MockHolidayAccount[] = createHolidayAccounts("1");
 
 let holidayRequests: MockRequest[] = [
     {
-        id: 1, employeeId: 1, employee: "John Carter",
+        id: "1", employeeId: "1", employee: "John Carter",
         account: "Weeks 1–5", startDate: "2026-12-01",
         endDate: "2026-12-05", type: "Holiday",
         status: "Approved", submittedDate: "2026-11-10",
         decisionDate: "2026-11-11"
     },
     {
-        id: 2, employeeId: 1, employee: "John Carter",
+        id: "2", employeeId: "1", employee: "John Carter",
         account: "Weeks 1–5", startDate: "2026-12-01",
         endDate: "2026-12-05", type: "Cancellation",
-        originalRequestId: 1, status: "Pending",
+        originalRequestId: "1", status: "Pending",
         submittedDate: "2026-11-17", decisionDate: ""
     },
     {
-        id: 3, employeeId: 1, employee: "John Carter",
+        id: "3", employeeId: "1", employee: "John Carter",
         account: "Week 6", startDate: "2026-12-14",
         endDate: "2026-12-18", type: "Holiday",
         status: "Pending", submittedDate: "2026-11-18",
         decisionDate: ""
     },
     {
-        id: 4, employeeId: 1, employee: "John Carter",
+        id: "4", employeeId: "1", employee: "John Carter",
         account: "Weeks 1–5", startDate: "2026-10-05",
         endDate: "2026-10-09", type: "Holiday",
         status: "Rejected", submittedDate: "2026-09-20",
@@ -114,7 +113,7 @@ let holidayRequests: MockRequest[] = [
 ];
 
 let announcements: Announcement[] = [];
-let scheduleHistory: Record<number, ScheduleChange[]> = {};
+let scheduleHistory: Record<string, ScheduleChange[]> = {};
 
 let nextUserId = 4;
 let nextRequestId = 5;
@@ -124,11 +123,10 @@ let nextScheduleChangeId = 1;
 // Authentication
 export async function login(
     email: string,
-    password: string,
-    role: SystemRole
+    password: string
 ): Promise<MockUser | null> {
     const user = users.find(u =>
-        u.email === email && u.password === password && u.role === role
+        u.email === email && u.password === password
     );
 
     loggedInUser = user ?? null;
@@ -160,7 +158,7 @@ export async function createEmployee(data: CreateEmployeeData): Promise<void> {
             data.employmentType === "Accountant" ? "Accountant" : "Employee";
 
     const user: MockUser = {
-        id: nextUserId++,
+        id: String(nextUserId++),
         name: data.name,
         email: data.email,
         password: data.password,
@@ -183,7 +181,7 @@ export async function createEmployee(data: CreateEmployeeData): Promise<void> {
 }
 
 export async function updateUser(
-    id: number,
+    id: string,
     updates: Partial<Pick<MockUser,
         "name" | "email" | "password" | "role" | "employmentType" | "weeklySchedule"
     >>
@@ -203,7 +201,7 @@ export async function updateUser(
         scheduleHistory[id] ??= [];
 
         scheduleHistory[id].push({
-            id: nextScheduleChangeId++,
+            id: String(nextScheduleChangeId++),
             date: new Date().toISOString().split("T")[0],
             previousSchedule: JSON.parse(JSON.stringify(user.weeklySchedule)),
             newSchedule: JSON.parse(JSON.stringify(updates.weeklySchedule))
@@ -242,7 +240,7 @@ export async function updateUser(
     return { ...user };
 }
 
-export async function deleteUser(id: number): Promise<void> {
+export async function deleteUser(id: string): Promise<void> {
     if (!users.some(u => u.id === id))
         throw new Error("User not found.");
 
@@ -260,12 +258,12 @@ export async function getEmployees(): Promise<Employee[]> {
     return employees.map(e => ({ ...e }));
 }
 
-export async function getEmployeeById(id: number): Promise<Employee | undefined> {
+export async function getEmployeeById(id: string): Promise<Employee | undefined> {
     const employee = employees.find(e => e.id === id);
     return employee ? { ...employee } : undefined;
 }
 
-export async function getEmployeeSchedule(id: number): Promise<WeeklySchedule | undefined> {
+export async function getEmployeeSchedule(id: string): Promise<WeeklySchedule | undefined> {
     const schedule = users.find(u => u.id === id)?.weeklySchedule;
 
     return schedule
@@ -276,7 +274,7 @@ export async function getEmployeeSchedule(id: number): Promise<WeeklySchedule | 
 }
 
 // Working schedule history
-export async function getScheduleHistory(id: number): Promise<ScheduleChange[]> {
+export async function getScheduleHistory(id: string): Promise<ScheduleChange[]> {
     return (scheduleHistory[id] || []).map(change => ({
         ...change,
         previousSchedule: Object.fromEntries(
@@ -289,7 +287,7 @@ export async function getScheduleHistory(id: number): Promise<ScheduleChange[]> 
 }
 
 // Holiday accounts
-export async function getHolidayAccounts(employeeId: number): Promise<MockHolidayAccount[]> {
+export async function getHolidayAccounts(employeeId: string): Promise<MockHolidayAccount[]> {
     return holidayAccounts
         .filter(a => a.employeeId === employeeId)
         .map(a => ({
@@ -308,7 +306,7 @@ export async function createHolidayRequest(
     const newRequest: MockRequest = {
         ...request,
         type: request.type ?? "Holiday",
-        id: nextRequestId++,
+        id: String(nextRequestId++),
         status: "Pending",
         submittedDate: new Date().toISOString().split("T")[0],
         decisionDate: ""
@@ -319,9 +317,9 @@ export async function createHolidayRequest(
 }
 
 export async function createCancellationRequest(
-    employeeId: number,
+    employeeId: string,
     employee: string,
-    originalRequestId: number
+    originalRequestId: string
 ): Promise<MockRequest> {
     const original = holidayRequests.find(r =>
         r.id === originalRequestId &&
@@ -349,7 +347,7 @@ export async function createCancellationRequest(
     });
 }
 
-export async function getEmployeeRequestHistory(employeeId: number): Promise<MockRequest[]> {
+export async function getEmployeeRequestHistory(employeeId: string): Promise<MockRequest[]> {
     return holidayRequests
         .filter(r => r.employeeId === employeeId)
         .map(r => ({ ...r }));
@@ -380,15 +378,15 @@ export async function getRequestHistory(): Promise<MockRequest[]> {
         .map(r => ({ ...r }));
 }
 
-export async function approveRequest(id: number): Promise<MockRequest> {
+export async function approveRequest(id: string): Promise<MockRequest> {
     return updateRequestStatus(id, "Approved");
 }
 
-export async function rejectRequest(id: number): Promise<MockRequest> {
+export async function rejectRequest(id: string): Promise<MockRequest> {
     return updateRequestStatus(id, "Rejected");
 }
 
-async function updateRequestStatus(id: number, status: string): Promise<MockRequest> {
+async function updateRequestStatus(id: string, status: string): Promise<MockRequest> {
     const request = holidayRequests.find(r => r.id === id);
     if (!request) throw new Error("Holiday request not found.");
 
@@ -412,7 +410,7 @@ export async function sendAnnouncement(message: string): Promise<void> {
     if (!message.trim()) throw new Error("Please enter a message.");
 
     announcements.push({
-        id: nextAnnouncementId++,
+        id: String(nextAnnouncementId++),
         message: message.trim(),
         date: new Date().toISOString().split("T")[0]
     });

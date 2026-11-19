@@ -3,8 +3,9 @@ import { useState } from "react";
 import {
     createEmployee, updateUser, createDefaultSchedule, WORKDAYS, EMPLOYMENT_TYPES,
     DEFAULT_EMPLOYMENT_TYPE,
-    type WeeklySchedule, type PublicUser
 } from "../mockApi";
+import type { WeeklySchedule } from "../employee";
+import type { PublicUser } from "../admin";
 
 type Props = {
     user?: PublicUser;
@@ -21,7 +22,7 @@ function CreateEmployee({ user, onClose, onCreated }: Props) {
     const isEmployee = role === EMPLOYMENT_TYPES[0] || role === EMPLOYMENT_TYPES[1];
 
     const update = (day: keyof WeeklySchedule, field: "from" | "to", value: string) =>
-        setSchedule(prev => ({ ...prev, [day]: { ...prev[day], [field]: value } }));
+        setSchedule((prev: WeeklySchedule) => ({ ...prev, [day]: { ...prev[day], [field]: value } }));
 
     const submit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();

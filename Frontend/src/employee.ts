@@ -1,6 +1,6 @@
 
 export interface Employee {
-    id: number;
+    id: string;
     name: string;
     role: string;
 }
@@ -8,11 +8,10 @@ export interface Employee {
 export interface HolidayBalance {
     hours: number;
     days: number;
-    dkk: number;
 }
 
 export interface HolidayAccount {
-    id: number;
+    id: string;
     name: string;
     accrued: HolidayBalance;
     used: HolidayBalance;
@@ -21,7 +20,7 @@ export interface HolidayAccount {
 }
 
 export interface HolidayRequest {
-    id: number;
+    id: string;
     account: string;
     startDate: string;
     endDate: string;
@@ -47,7 +46,7 @@ export interface DailySchedule {
 export type WeeklySchedule = Record<Weekday, DailySchedule>;
 
 export interface ScheduleChange {
-    id: number;
+    id: string;
     date: string;
     previousSchedule: WeeklySchedule;
     newSchedule: WeeklySchedule;
@@ -58,8 +57,8 @@ export interface MockHolidayBalance {
 }
 
 export interface MockHolidayAccount {
-    id: number;
-    employeeId: number;
+    id: string;
+    employeeId: string;
     name: string;
     accrued: MockHolidayBalance;
     used: MockHolidayBalance;
@@ -68,8 +67,8 @@ export interface MockHolidayAccount {
 }
 
 export interface MockRequest extends HolidayRequest {
-    employeeId: number;
+    employeeId: string;
     employee: string;
     type: RequestType;
-    originalRequestId?: number;
+    originalRequestId?: string;
 }

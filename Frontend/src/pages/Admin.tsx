@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
     getUsers, getCurrentUser, deleteUser,
-    sendAnnouncement, getAnnouncements, getScheduleHistory,
-    type PublicUser, type Announcement, type ScheduleChange, type WeeklySchedule, WORKDAYS
+    sendAnnouncement, getAnnouncements, getScheduleHistory, WORKDAYS
 } from "../mockApi";
+import type { PublicUser, Announcement } from "../admin";
+import type { ScheduleChange, WeeklySchedule } from "../employee";
 import CreateEmployee from "./CreateEmployee";
 
 function formatSchedule(schedule?: WeeklySchedule) {
@@ -14,7 +15,7 @@ function formatSchedule(schedule?: WeeklySchedule) {
 
 function Admin() {
     const [users, setUsers] = useState<PublicUser[]>([]);
-    const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [selectedUser, setSelectedUser] = useState<PublicUser | undefined>();
     const [historyUser, setHistoryUser] = useState<PublicUser | undefined>();
     const [history, setHistory] = useState<ScheduleChange[]>([]);
@@ -48,7 +49,7 @@ function Admin() {
         setHistory(await getScheduleHistory(user.id));
     };
 
-    const handleDelete = async (id: number) => {
+    const handleDelete = async (id: string) => {
         if (!window.confirm("Are you sure you want to delete this account?")) return;
 
         try {
