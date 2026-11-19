@@ -29,3 +29,9 @@ export interface CreateEmployeeData {
     employmentType: string;
     weeklySchedule?: WeeklySchedule;
 }
+
+export interface Announcement {
+    id: number;
+    message: string;
+    date: string;
+}

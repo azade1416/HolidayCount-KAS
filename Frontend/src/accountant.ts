@@ -9,9 +9,3 @@ export interface AccountantRequest {
     submittedDate: string;
     type: RequestType;
 }
-
-export interface Announcement {
-    id: number;
-    message: string;
-    date: string;
-}

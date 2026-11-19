@@ -1,7 +1,6 @@
 
 import type {
     Employee,
-    HolidayRequest,
     Weekday,
     RequestType,
     WeeklySchedule,
@@ -14,13 +13,11 @@ import type {
     SystemRole,
     MockUser,
     PublicUser,
-    CreateEmployeeData
+    CreateEmployeeData,
+    Announcement
 } from "./admin";
 
-import type {
-    AccountantRequest,
-    Announcement
-} from "./accountant";
+import type { AccountantRequest } from "./accountant";
 
 export const SYSTEM_ROLES: SystemRole[] = ["Employee", "Accountant", "Admin"];
 export const WORKDAYS: Weekday[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
@@ -84,6 +81,7 @@ let employees: Employee[] = [
 ];
 
 let holidayAccounts: MockHolidayAccount[] = createHolidayAccounts(1);
+
 let holidayRequests: MockRequest[] = [
     {
         id: 1, employeeId: 1, employee: "John Carter",
@@ -114,6 +112,7 @@ let holidayRequests: MockRequest[] = [
         decisionDate: "2026-09-22"
     }
 ];
+
 let announcements: Announcement[] = [];
 let scheduleHistory: Record<number, ScheduleChange[]> = {};
 
