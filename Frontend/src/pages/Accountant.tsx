@@ -61,22 +61,20 @@ function Accountant() {
         navigate("/login");
     }
 
-    const cell = { padding: 10, borderBottom: "1px solid #eee", textAlign: "left" as const };
     const year = month.getFullYear();
     const monthIndex = month.getMonth();
     const days = new Date(year, monthIndex + 1, 0).getDate();
-    const dateKey = (day: number) =>
-        `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    const square = {
-        width: 38, height: 38, border: "1px solid #ddd",
-        boxSizing: "border-box" as const
+    const dateKey = (day: number) => {
+        const monthText = String(monthIndex + 1).padStart(2, "0");
+        const dayText = String(day).padStart(2, "0");
+        return `${year}-${monthText}-${dayText}`;
     };
 
     return (
         <div className="dashboard">
             <div className="header">
                 <p>Accountant</p>
-                <div style={{ display: "flex", gap: 10 }}>
+                <div className="header-actions">
                     <button onClick={() => setShowCalendar(true)}>View Employees Calendar</button>
                     <button onClick={signOut}>Sign out</button>
                 </div>
@@ -97,8 +95,8 @@ function Accountant() {
                         return (
                             <tr key={r.id}>
                                 <td>
-                                    <button onClick={() => employee && openEmployee(employee.id)}
-                                            style={{ border: "none", background: "none", color: "#1674c4", cursor: "pointer", textDecoration: "underline" }}>
+                                    <button className="employee-link"
+                                            onClick={() => employee && openEmployee(employee.id)}>
                                         {r.employee}
                                     </button>
                                 </td>
@@ -143,24 +141,24 @@ function Accountant() {
             </div>
 
             {showCalendar && (
-                <div style={overlay}>
-                    <div style={dialog}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div className="accountant-overlay">
+                    <div className="accountant-dialog">
+                        <div className="dialog-heading">
                             <h2>Employees Holiday Calendar</h2>
                             <button onClick={() => setShowCalendar(false)}>✕</button>
                         </div>
 
-                        <div style={{ display: "flex", justifyContent: "center", gap: 15, alignItems: "center", marginBottom: 15 }}>
+                        <div className="calendar-controls">
                             <button onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}>‹</button>
                             <strong>{month.toLocaleDateString("en", { month: "long", year: "numeric" })}</strong>
                             <button onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}>›</button>
                         </div>
 
-                        <div style={{ overflowX: "auto" }}>
-                            <div style={{ display: "grid", gridTemplateColumns: `140px repeat(${days}, 38px)`, width: "max-content" }}>
-                                <div style={{ ...cell, position: "sticky", left: 0, background: "white", zIndex: 2 }}>Employee</div>
+                        <div className="calendar-scroll">
+                            <div className="calendar-grid" style={{ gridTemplateColumns: `140px repeat(${days}, 38px)` }}>
+                                <div className="calendar-name calendar-name-heading">Employee</div>
                                 {Array.from({ length: days }, (_, i) => (
-                                    <div key={i} style={{ ...square, height: 48, fontSize: 11, display: "grid", placeContent: "center", textAlign: "center" }}>
+                                    <div key={i} className="calendar-day">
                                         {new Date(year, monthIndex, i + 1).toLocaleDateString("en", { weekday: "short" })}
                                         <strong>{i + 1}</strong>
                                     </div>
@@ -168,7 +166,7 @@ function Accountant() {
 
                                 {employees.map(employee => (
                                     <Fragment key={employee.id}>
-                                        <div style={{ ...cell, position: "sticky", left: 0, background: "white", zIndex: 1 }}>
+                                        <div className="calendar-name">
                                             {employee.name}
                                         </div>
                                         {Array.from({ length: days }, (_, i) => {
@@ -178,51 +176,45 @@ function Accountant() {
                                                 (r.type ?? "Holiday") === "Holiday" &&
                                                 r.startDate <= date && r.endDate >= date
                                             );
-                                            return <div key={date} style={{ ...square, background: holiday ? "#bde8c5" : "white" }} />;
+                                            return <div key={date} className={holiday ? "calendar-square holiday" : "calendar-square"} />;
                                         })}
                                     </Fragment>
                                 ))}
                             </div>
-                        </div>
-                        <div style={{ textAlign: "right", marginTop: 20 }}>
-                            
                         </div>
                     </div>
                 </div>
             )}
 
             {selectedEmployee && (
-                <div style={overlay}>
-                    <div style={{ ...dialog, maxWidth: 850 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div className="accountant-overlay">
+                    <div className="accountant-dialog balance-dialog">
+                        <div className="dialog-heading">
                             <h2>{selectedEmployee.name}'s Holiday Balance Overview</h2>
                             <button onClick={() => setSelectedEmployee(null)}>✕</button>
                         </div>
-                        <div style={{ overflowX: "auto" }}>
-                            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                        <div className="calendar-scroll">
+                            <table className="accountant-table">
                                 <thead>
                                 <tr>
                                     {["Holiday account", "Accrued holiday", "Used holiday", "Total holiday left", "Eligible date"].map(x =>
-                                        <th key={x} style={cell}>{x}</th>
+                                        <th key={x} className="accountant-cell">{x}</th>
                                     )}
                                 </tr>
                                 </thead>
                                 <tbody>
                                 {accounts.map(a => (
                                     <tr key={a.id}>
-                                        <td style={cell}>{a.name}</td>
-                                        <td style={cell}>{a.accrued.hours} hours</td>
-                                        <td style={cell}>{a.used.hours} hours</td>
-                                        <td style={cell}>{a.remaining.hours} hours</td>
-                                        <td style={cell}>{a.eligibleDate || "—"}</td>
+                                        <td className="accountant-cell">{a.name}</td>
+                                        <td className="accountant-cell">{a.accrued.hours} hours</td>
+                                        <td className="accountant-cell">{a.used.hours} hours</td>
+                                        <td className="accountant-cell">{a.remaining.hours} hours</td>
+                                        <td className="accountant-cell">{a.eligibleDate || "—"}</td>
                                     </tr>
                                 ))}
-                                {!accounts.length && <tr><td colSpan={5} style={cell}>No holiday accounts found.</td></tr>}
+                                {!accounts.length && <tr><td colSpan={5} className="accountant-cell">No holiday accounts found.</td></tr>}
                                 </tbody>
                             </table>
-                        </div>
-                        <div style={{ textAlign: "right", marginTop: 20 }}>
-                            
                         </div>
                     </div>
                 </div>
@@ -230,17 +222,5 @@ function Accountant() {
         </div>
     );
 }
-
-const overlay = {
-    position: "fixed" as const, inset: 0, background: "rgba(0,0,0,0.5)",
-    display: "flex", justifyContent: "center", alignItems: "center",
-    zIndex: 1000, padding: 20
-};
-
-const dialog = {
-    background: "white", padding: 24, borderRadius: 8,
-    width: "100%", maxWidth: 1100, maxHeight: "80vh",
-    overflowY: "auto" as const
-};
 
 export default Accountant;

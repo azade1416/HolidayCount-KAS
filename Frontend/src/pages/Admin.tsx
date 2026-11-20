@@ -72,6 +72,11 @@ function Admin() {
         }
     };
 
+    function editUser(user: PublicUser) {
+        setSelectedUser(user);
+        setShowModal(true);
+    }
+
     return (
         <div className="dashboard">
             <div className="header">
@@ -103,15 +108,12 @@ function Admin() {
                             <td>{user.name}</td>
                             <td>{user.email}</td>
                             <td>
-                                    <span className={`badge ${user.role === "Admin" ? "admin" : "user"}`}>
+                                    <span className={user.role === "Admin" ? "badge admin" : "badge user"}>
                                         {user.employmentType || user.role}
                                     </span>
                             </td>
                             <td>
-                                <button className="edit" onClick={() => {
-                                    setSelectedUser(user);
-                                    setShowModal(true);
-                                }}>
+                                <button className="edit" onClick={() => editUser(user)}>
                                     Edit
                                 </button>
 
@@ -124,7 +126,7 @@ function Admin() {
                                 )}
                             </td>
                             <td>
-                                    <pre style={{ margin: 0, fontFamily: "inherit" }}>
+                                    <pre className="schedule-text">
                                         {formatSchedule(user.weeklySchedule)}
                                     </pre>
                             </td>
@@ -148,14 +150,14 @@ function Admin() {
                     onChange={e => setMessage(e.target.value)}
                     placeholder="Write a message to all employees..."
                     rows={4}
-                    style={{ width: "100%", padding: 10, boxSizing: "border-box" }}
+                    className="announcement-input"
                 />
                 <button className="admin-button" onClick={handleSend} disabled={!message.trim()}>
                     Send Announcement
                 </button>
 
                 {announcements.map(a => (
-                    <div key={a.id} style={{ padding: "12px 0", borderBottom: "1px solid #ddd" }}>
+                    <div key={a.id} className="announcement-item">
                         <p>{a.message}</p>
                         <small>{a.date}</small>
                     </div>
@@ -185,7 +187,7 @@ function Admin() {
                             {[...history].reverse().map(change => (
                                 <tr key={change.id}>
                                     <td>
-                                            <pre style={{ margin: 0, fontFamily: "inherit" }}>
+                                            <pre className="schedule-text">
                                                 {formatSchedule(change.newSchedule)}
                                             </pre>
                                     </td>

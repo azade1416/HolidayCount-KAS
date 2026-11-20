@@ -14,15 +14,18 @@ type Props = {
 };
 
 function CreateEmployee({ user, onClose, onCreated }: Props) {
-    const startingRole = user?.employmentType ??
-        (user?.role === "Employee" ? DEFAULT_EMPLOYMENT_TYPE : user?.role ?? DEFAULT_EMPLOYMENT_TYPE);
+    const startingRole = user?.employmentType ?? user?.role ?? DEFAULT_EMPLOYMENT_TYPE;
     const [role, setRole] = useState(startingRole);
     const [schedule, setSchedule] = useState(user?.weeklySchedule ?? createDefaultSchedule());
 
     const isEmployee = role === EMPLOYMENT_TYPES[0] || role === EMPLOYMENT_TYPES[1];
 
-    const update = (day: keyof WeeklySchedule, field: "from" | "to", value: string) =>
-        setSchedule((prev: WeeklySchedule) => ({ ...prev, [day]: { ...prev[day], [field]: value } }));
+    function update(day: keyof WeeklySchedule, field: "from" | "to", value: string) {
+        setSchedule(previous => ({
+            ...previous,
+            [day]: { ...previous[day], [field]: value }
+        }));
+    }
 
     const submit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -30,11 +33,12 @@ function CreateEmployee({ user, onClose, onCreated }: Props) {
         const data = new FormData(e.currentTarget);
         const valid = (time: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
 
-        if (isEmployee && WORKDAYS.some(day =>
-            !valid(schedule[day].from) ||
-            !valid(schedule[day].to) ||
-            schedule[day].from >= schedule[day].to
-        )) {
+        const hasInvalidHours = WORKDAYS.some(day => {
+            const hours = schedule[day];
+            return !valid(hours.from) || !valid(hours.to) || hours.from >= hours.to;
+        });
+
+        if (isEmployee && hasInvalidHours) {
             alert("Enter valid working hours (HH:MM).");
             return;
         }
@@ -87,18 +91,12 @@ function CreateEmployee({ user, onClose, onCreated }: Props) {
                     <input name="email" type="email" defaultValue={user?.email || ""} required />
 
                     <label>Password</label>
-                    <input
-                        name="password"
-                        type="password"
-                        required={!user}
-                        placeholder={user ? "Leave empty to keep current password" : ""}
-                    />
+                    <input name="password" type="password" required={!user}
+                           placeholder={user ? "Leave empty to keep current password" : ""} />
 
                     <label>Role</label>
                     <select value={role} onChange={e => setRole(e.target.value)}>
-                        {EMPLOYMENT_TYPES.map(r =>
-                            <option key={r}>{r}</option>
-                        )}
+                        {EMPLOYMENT_TYPES.map(role => <option key={role}>{role}</option>)}
                     </select>
 
                     {isEmployee && (
@@ -115,16 +113,10 @@ function CreateEmployee({ user, onClose, onCreated }: Props) {
                                 <div className="schedule-row" key={day}>
                                     <strong>{day}</strong>
 
-                                    <input
-                                        value={schedule[day].from}
-                                        onChange={e => update(day, "from", e.target.value)}
-                                        required
-                                    />
-                                    <input
-                                        value={schedule[day].to}
-                                        onChange={e => update(day, "to", e.target.value)}
-                                        required
-                                    />
+                                    <input value={schedule[day].from}
+                                           onChange={e => update(day, "from", e.target.value)} required />
+                                    <input value={schedule[day].to}
+                                           onChange={e => update(day, "to", e.target.value)} required />
                                 </div>
                             ))}
                         </div>

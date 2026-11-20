@@ -17,11 +17,12 @@ function Login() {
                 return;
             }
 
-            navigate(
-                user.role === "Accountant" ? "/accountant" :
-                    user.role === "Admin" ? "/admin" :
-                        "/employee"
-            );
+            const destinations: Record<string, string> = {
+                Accountant: "/accountant",
+                Admin: "/admin",
+                Employee: "/employee"
+            };
+            navigate(destinations[user.role] ?? "/employee");
 
         } catch (error) {
             console.error("Login error:", error);

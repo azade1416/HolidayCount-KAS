@@ -10,11 +10,8 @@ import type { PublicUser } from "../admin";
 import type { MockHolidayAccount, MockRequest, WeeklySchedule } from "../employee";
 import type { Employee as EmployeeType } from "../employee";
 
-const cell = { padding: 8, borderBottom: "1px solid #eee", textAlign: "center" as const };
-const card = { background: "white", padding: 14, borderRadius: 8 };
-const button = { padding: "7px 12px", cursor: "pointer" };
-const holidayColor = "#bde8c5";
-const square = { width: 38, height: 38, border: "1px solid #ddd", boxSizing: "border-box" as const };
+const balanceLabels = ["Accrued holiday", "Used holiday", "Total holiday left"];
+const historyHeaders = ["Type", "Account", "Dates", "Status", "Submitted", "Decision"];
 
 function Employee() {
     const navigate = useNavigate();
@@ -94,8 +91,11 @@ function Employee() {
     const year = month.getFullYear();
     const monthIndex = month.getMonth();
     const days = new Date(year, monthIndex + 1, 0).getDate();
-    const dateKey = (day: number) =>
-        `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const dateKey = (day: number) => {
+        const monthText = String(monthIndex + 1).padStart(2, "0");
+        const dayText = String(day).padStart(2, "0");
+        return `${year}-${monthText}-${dayText}`;
+    };
 
     const schedule = user?.weeklySchedule;
 
@@ -105,37 +105,36 @@ function Employee() {
     }
 
     return (
-        <div style={{ padding: "20px 3%", background: "#f5f6f2", minHeight: "100vh" }}>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 14, marginBottom: 20 }}>
+        <div className="employee-page">
+            <div className="employee-header">
                 {user?.name}　Employee
                 <button onClick={signOut}>Sign out</button>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-                <div style={card}>
+            <div className="employee-cards">
+                <div className="employee-card">
                     <h3>Book holiday</h3>
                     <label>Holiday account</label>
-                    <select value={accountId} onChange={e => setAccountId(e.target.value)}
-                            style={{ display: "block", width: "100%", padding: 8, margin: "6px 0 12px" }}>
-                        
+                    <select className="employee-input" value={accountId}
+                            onChange={e => setAccountId(e.target.value)}>
                         {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </select>
 
                     <label>From</label>
-                    <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                           style={{ display: "block", width: "100%", padding: 7, margin: "6px 0 10px" }} />
+                    <input className="employee-input" type="date" value={startDate}
+                           onChange={e => setStartDate(e.target.value)} />
 
                     <label>To</label>
-                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
-                           style={{ display: "block", width: "100%", padding: 7, margin: "6px 0 12px" }} />
+                    <input className="employee-input" type="date" value={endDate}
+                           onChange={e => setEndDate(e.target.value)} />
 
                     <button onClick={submitRequest} disabled={!accounts.length}>Submit holiday request</button>
 
-                    <hr style={{ border: 0, borderTop: "4px solid black", margin: "20px 0" }} />
+                    <hr className="employee-divider" />
                     <h3>Request holiday cancellation</h3>
                     <label>Approved holiday</label>
-                    <select value={cancellationId} onChange={e => setCancellationId(e.target.value)}
-                            style={{ display: "block", width: "100%", padding: 8, margin: "6px 0 12px" }}>
+                    <select className="employee-input" value={cancellationId}
+                            onChange={e => setCancellationId(e.target.value)}>
                         <option value="">Select approved holiday</option>
                         {approvedHolidays.map(r =>
                             <option key={r.id} value={r.id}>{r.account}: {r.startDate} – {r.endDate}</option>
@@ -145,24 +144,24 @@ function Employee() {
                     <button onClick={submitCancellation} disabled={!approvedHolidays.length}>
                         Submit cancellation request
                     </button>
-                    {error && <p style={{ color: "red" }}>{error}</p>}
+                    {error && <p className="employee-error">{error}</p>}
 
-                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "4px solid black" }}>
+                    <div className="transfer-box">
                         <strong>Unused holiday transfer</strong>
-                        <p style={{ fontSize: 12, color: "#666" }}>Have unused holiday hours you may want to carry over?</p>
-                        <button disabled style={{ ...button, opacity: 0.6 }}>Request transfer</button>
+                        <p className="employee-muted small">Have unused holiday hours you may want to carry over?</p>
+                        <button className="employee-small-button" disabled>Request transfer</button>
                     </div>
                 </div>
 
-                <div style={card}>
+                <div className="employee-card">
                     {accounts.map((a, i) => (
                         <Fragment key={a.id}>
-                            {i > 0 && <hr style={{ border: 0, borderTop: "4px solid black", margin: "20px 0" }} />}
+                            {i > 0 && <hr className="employee-divider" />}
                             <h3>{a.name}</h3>
                             {(["accrued", "used", "remaining"] as const).map((key, index) => (
-                                <div key={key} style={{ padding: "9px 0", borderBottom: "1px solid #eee" }}>
-                                    {["Accrued holiday", "Used holiday", "Total holiday left"][index]}
-                                    <div style={{ marginTop: 4 }}>{a[key].hours} hours</div>
+                                <div key={key} className="balance-row">
+                                    {balanceLabels[index]}
+                                    <div className="balance-value">{a[key].hours} hours</div>
                                 </div>
                             ))}
                             <p>Eligible date of use: {a.eligibleDate || "—"}</p>
@@ -171,39 +170,38 @@ function Employee() {
                     {!accounts.length && <p>No holiday accounts available.</p>}
                 </div>
 
-                <div style={card}>
+                <div className="employee-card">
                     <h3>Future holiday balance</h3>
-                    <p style={{ fontSize: 13 }}>Check how much holiday you will have on a future date.</p>
+                    <p className="employee-muted">Check how much holiday you will have on a future date.</p>
                     <label>Select a future date</label>
-                    <input type="date" value={futureDate} onChange={e => setFutureDate(e.target.value)}
-                           min={new Date().toISOString().split("T")[0]}
-                           style={{ display: "block", width: "100%", padding: 8, margin: "6px 0 12px", boxSizing: "border-box" }} />
-                    <button disabled={!futureDate} style={{ ...button, opacity: futureDate ? 1 : 0.6 }}>
-                        Calculate
-                    </button>
+                    <input className="employee-input" type="date" value={futureDate}
+                           onChange={e => setFutureDate(e.target.value)}
+                           min={new Date().toISOString().split("T")[0]} />
+                    <button className={!futureDate ? "employee-small-button" : "employee-small-button active"}
+                            disabled={!futureDate}>Calculate</button>
 
-                    <div style={{ marginTop: 14, padding: 10, background: "#f5f6f2", borderRadius: 6 }}>
+                    <div className="future-balance">
                         <strong>Future balance</strong>
-                        <p style={{ fontSize: 12, color: "#666", marginBottom: 0 }}>
+                        <p className="employee-muted small no-bottom-margin">
                             Your calculated balance will appear here.
                         </p>
                     </div>
 
-                    <hr style={{ border: 0, borderTop: "4px solid black", margin: "20px 0" }} />
+                    <hr className="employee-divider" />
                     <h3>Working schedule</h3>
-                    <p style={{ fontSize: 12, color: "#666" }}>Your current weekly working hours.</p>
-                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <p className="employee-muted small">Your current weekly working hours.</p>
+                    <table className="employee-table">
                         <thead>
                         <tr>
-                            <th style={{ ...cell, textAlign: "left" }}>Day</th>
-                            <th style={cell}>Working hours</th>
+                            <th className="employee-cell left">Day</th>
+                            <th className="employee-cell">Working hours</th>
                         </tr>
                         </thead>
                         <tbody>
                         {CALENDAR_WEEKDAYS.map(day => (
                             <tr key={day}>
-                                <td style={{ ...cell, textAlign: "left" }}>{day}</td>
-                                <td style={cell}>{getWorkingHours(day)}</td>
+                                <td className="employee-cell left">{day}</td>
+                                <td className="employee-cell">{getWorkingHours(day)}</td>
                             </tr>
                         ))}
                         </tbody>
@@ -211,28 +209,28 @@ function Employee() {
                 </div>
             </div>
 
-            <div style={{ ...card, marginTop: 18 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div className="employee-card calendar-card">
+                <div className="calendar-heading">
                     <h3>Holiday calendar</h3>
                     <div>
-                        <button style={button} onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}>‹</button>
-                        {" "}{month.toLocaleDateString("en", { month: "long", year: "numeric" })}{" "}
-                        <button style={button} onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}>›</button>
+                        <button onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}>‹</button>
+                        {month.toLocaleDateString("en", { month: "long", year: "numeric" })}
+                        <button onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}>›</button>
                     </div>
                 </div>
 
-                <div style={{ overflowX: "auto" }}>
-                    <div style={{ display: "grid", gridTemplateColumns: `140px repeat(${days}, 38px)`, width: "max-content" }}>
-                        <div style={{ ...cell, position: "sticky", left: 0, background: "white", zIndex: 2 }}>Employee</div>
+                <div className="calendar-scroll">
+                    <div className="calendar-grid" style={{ gridTemplateColumns: `140px repeat(${days}, 38px)` }}>
+                        <div className="calendar-name calendar-name-heading">Employee</div>
                         {Array.from({ length: days }, (_, i) => (
-                            <div key={i} style={{ ...square, height: 48, fontSize: 11, display: "grid", placeContent: "center", textAlign: "center" }}>
+                            <div key={i} className="calendar-day">
                                 {new Date(year, monthIndex, i + 1).toLocaleDateString("en", { weekday: "short" })}
                                 <strong>{i + 1}</strong>
                             </div>
                         ))}
                         {employees.map(employee => (
                             <Fragment key={employee.id}>
-                                <div style={{ ...cell, position: "sticky", left: 0, background: "white", zIndex: 1, textAlign: "left" }}>
+                                <div className="calendar-name">
                                     {employee.name}
                                 </div>
                                 {Array.from({ length: days }, (_, i) => {
@@ -243,7 +241,7 @@ function Employee() {
                                         r.startDate <= date && r.endDate >= date
                                     );
                                     return <div key={date} title={`${employee.name} - ${date}`}
-                                                style={{ ...square, background: hasHoliday ? holidayColor : "white" }} />;
+                                                className={hasHoliday ? "calendar-square holiday" : "calendar-square"} />;
                                 })}
                             </Fragment>
                         ))}
@@ -251,23 +249,25 @@ function Employee() {
                 </div>
             </div>
 
-            <div style={{ ...card, marginTop: 18 }}>
+            <div className="employee-card history-card">
                 <h3>Request history</h3>
-                <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <div className="calendar-scroll">
+                    <table className="employee-table history-table">
                         <thead>
-                        <tr>{["Type", "Account", "Dates", "Status", "Submitted", "Decision"].map(x => <th key={x} style={{ ...cell, textAlign: "left" }}>{x}</th>)}</tr>
+                        <tr>{historyHeaders.map(header => <th key={header} className="employee-cell left">{header}</th>)}</tr>
                         </thead>
                         <tbody>
                         {history.map(r => (
                             <tr key={r.id}>
-                                {[r.type ?? "Holiday", r.account, `${r.startDate} – ${r.endDate}`,
-                                    r.status, r.submittedDate, r.decisionDate || "—"].map((x, i) =>
-                                    <td key={i} style={{ ...cell, textAlign: "left" }}>{x}</td>
-                                )}
+                                <td className="employee-cell left">{r.type ?? "Holiday"}</td>
+                                <td className="employee-cell left">{r.account}</td>
+                                <td className="employee-cell left">{r.startDate} – {r.endDate}</td>
+                                <td className="employee-cell left">{r.status}</td>
+                                <td className="employee-cell left">{r.submittedDate}</td>
+                                <td className="employee-cell left">{r.decisionDate || "—"}</td>
                             </tr>
                         ))}
-                        {!history.length && <tr><td colSpan={6} style={cell}>No requests yet.</td></tr>}
+                        {!history.length && <tr><td colSpan={6} className="employee-cell">No requests yet.</td></tr>}
                         </tbody>
                     </table>
                 </div>
