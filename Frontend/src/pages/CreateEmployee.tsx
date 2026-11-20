@@ -17,6 +17,15 @@ function CreateEmployee({ user, onClose, onCreated }: Props) {
     const startingRole = user?.employmentType ?? user?.role ?? DEFAULT_EMPLOYMENT_TYPE;
     const [role, setRole] = useState(startingRole);
     const [schedule, setSchedule] = useState(user?.weeklySchedule ?? createDefaultSchedule());
+    const accountFields = [
+        { label: "Full name", name: "name", type: "text", value: user?.name || "", required: true },
+        { label: "Email", name: "email", type: "email", value: user?.email || "", required: true },
+        {
+            label: "Password", name: "password", type: "password", value: undefined,
+            required: !user,
+            placeholder: user ? "Leave empty to keep current password" : undefined
+        }
+    ];
 
     const isEmployee = role === EMPLOYMENT_TYPES[0] || role === EMPLOYMENT_TYPES[1];
 
@@ -84,15 +93,18 @@ function CreateEmployee({ user, onClose, onCreated }: Props) {
                 <h3>{user ? "Edit employee account" : "Create employee account"}</h3>
 
                 <form onSubmit={submit}>
-                    <label>Full name</label>
-                    <input name="name" defaultValue={user?.name || ""} required />
-
-                    <label>Email</label>
-                    <input name="email" type="email" defaultValue={user?.email || ""} required />
-
-                    <label>Password</label>
-                    <input name="password" type="password" required={!user}
-                           placeholder={user ? "Leave empty to keep current password" : ""} />
+                    {accountFields.map(field => (
+                        <div className="form-field" key={field.name}>
+                            <label>{field.label}</label>
+                            <input
+                                name={field.name}
+                                type={field.type}
+                                defaultValue={field.value}
+                                required={field.required}
+                                placeholder={field.placeholder}
+                            />
+                        </div>
+                    ))}
 
                     <label>Role</label>
                     <select value={role} onChange={e => setRole(e.target.value)}>

@@ -9,9 +9,18 @@ import {
 import type { PublicUser } from "../admin";
 import type { MockHolidayAccount, MockRequest, WeeklySchedule } from "../employee";
 import type { Employee as EmployeeType } from "../employee";
+import HolidayCalendar from "./HolidayCalendar";
 
 const balanceLabels = ["Accrued holiday", "Used holiday", "Total holiday left"];
-const historyHeaders = ["Type", "Account", "Dates", "Status", "Submitted", "Decision"];
+const historyColumns = [
+    { title: "Type", value: (request: MockRequest) => request.type ?? "Holiday" },
+    { title: "Account", value: (request: MockRequest) => request.account },
+    { title: "Dates", value: (request: MockRequest) => `${request.startDate} – ${request.endDate}` },
+    { title: "Status", value: (request: MockRequest) => request.status },
+    { title: "Submitted", value: (request: MockRequest) => request.submittedDate },
+    { title: "Decision", value: (request: MockRequest) => request.decisionDate || "—" }
+];
+const balanceKeys = ["accrued", "used", "remaining"] as const;
 
 function Employee() {
     const navigate = useNavigate();
@@ -90,12 +99,6 @@ function Employee() {
 
     const year = month.getFullYear();
     const monthIndex = month.getMonth();
-    const days = new Date(year, monthIndex + 1, 0).getDate();
-    const dateKey = (day: number) => {
-        const monthText = String(monthIndex + 1).padStart(2, "0");
-        const dayText = String(day).padStart(2, "0");
-        return `${year}-${monthText}-${dayText}`;
-    };
 
     const schedule = user?.weeklySchedule;
 
@@ -158,7 +161,7 @@ function Employee() {
                         <Fragment key={a.id}>
                             {i > 0 && <hr className="employee-divider" />}
                             <h3>{a.name}</h3>
-                            {(["accrued", "used", "remaining"] as const).map((key, index) => (
+                            {balanceKeys.map((key, index) => (
                                 <div key={key} className="balance-row">
                                     {balanceLabels[index]}
                                     <div className="balance-value">{a[key].hours} hours</div>
@@ -219,34 +222,7 @@ function Employee() {
                     </div>
                 </div>
 
-                <div className="calendar-scroll">
-                    <div className="calendar-grid" style={{ gridTemplateColumns: `140px repeat(${days}, 38px)` }}>
-                        <div className="calendar-name calendar-name-heading">Employee</div>
-                        {Array.from({ length: days }, (_, i) => (
-                            <div key={i} className="calendar-day">
-                                {new Date(year, monthIndex, i + 1).toLocaleDateString("en", { weekday: "short" })}
-                                <strong>{i + 1}</strong>
-                            </div>
-                        ))}
-                        {employees.map(employee => (
-                            <Fragment key={employee.id}>
-                                <div className="calendar-name">
-                                    {employee.name}
-                                </div>
-                                {Array.from({ length: days }, (_, i) => {
-                                    const date = dateKey(i + 1);
-                                    const hasHoliday = approved.some(r =>
-                                        r.employeeId === employee.id &&
-                                        (r.type ?? "Holiday") === "Holiday" &&
-                                        r.startDate <= date && r.endDate >= date
-                                    );
-                                    return <div key={date} title={`${employee.name} - ${date}`}
-                                                className={hasHoliday ? "calendar-square holiday" : "calendar-square"} />;
-                                })}
-                            </Fragment>
-                        ))}
-                    </div>
-                </div>
+                <HolidayCalendar month={month} employees={employees} approved={approved} showEmployeeNames />
             </div>
 
             <div className="employee-card history-card">
@@ -254,17 +230,18 @@ function Employee() {
                 <div className="calendar-scroll">
                     <table className="employee-table history-table">
                         <thead>
-                        <tr>{historyHeaders.map(header => <th key={header} className="employee-cell left">{header}</th>)}</tr>
+                        <tr>{historyColumns.map(column => (
+                            <th key={column.title} className="employee-cell left">{column.title}</th>
+                        ))}</tr>
                         </thead>
                         <tbody>
                         {history.map(r => (
                             <tr key={r.id}>
-                                <td className="employee-cell left">{r.type ?? "Holiday"}</td>
-                                <td className="employee-cell left">{r.account}</td>
-                                <td className="employee-cell left">{r.startDate} – {r.endDate}</td>
-                                <td className="employee-cell left">{r.status}</td>
-                                <td className="employee-cell left">{r.submittedDate}</td>
-                                <td className="employee-cell left">{r.decisionDate || "—"}</td>
+                                {historyColumns.map(column => (
+                                    <td key={column.title} className="employee-cell left">
+                                        {column.value(r)}
+                                    </td>
+                                ))}
                             </tr>
                         ))}
                         {!history.length && <tr><td colSpan={6} className="employee-cell">No requests yet.</td></tr>}
