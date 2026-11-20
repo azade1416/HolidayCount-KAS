@@ -2,8 +2,22 @@ namespace Backend.Models;
 
 public enum EmploymentType
 {
-    Salaried,
-    Hourly
+    FullTime,
+    PartTime
+}
+
+public static class EmploymentTypeExtensions
+{
+    public static string? ToFrontendString(this EmploymentType employmentType)
+        => ((EmploymentType?)employmentType).ToFrontendString();
+
+    public static string? ToFrontendString(this EmploymentType? employmentType)
+        => employmentType switch
+        {
+            EmploymentType.FullTime => "Full-time employee",
+            EmploymentType.PartTime => "Part-time employee",
+            _ => null
+        };
 }
 
 public enum HolidayAccountType
@@ -18,6 +32,13 @@ public enum LeaveRequestStatus
     Approved,
     Rejected,
     Cancelled
+}
+
+public enum LeaveRequestType
+{
+    Holiday,
+    Cancellation,
+    Transfer
 }
 
 public enum HolidayTransactionType

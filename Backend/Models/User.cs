@@ -8,16 +8,16 @@ public class User
     [PrimaryKey]
     [Column("Id")]
     public Guid Id { get; set; } = Guid.NewGuid();
-    [Column("Fullname")]
-    public string Fullname { get; set; } = string.Empty;
-    [Column("Username")]
-    public string Username { get; set; } = string.Empty;
+    [Column("FullName")]
+    public string FullName { get; set; } = string.Empty;
+    [Column("Email")]
+    public string Email { get; set; } = string.Empty;
     [Column("PasswordHash")]
     public string PasswordHash { get; set; } = string.Empty; 
     [Column("Role")]
     public string Role { get; set; } = "employee";
     [Column("EmploymentType")]
-    public EmploymentType EmploymentType { get; set; } = EmploymentType.Salaried;
+    public EmploymentType EmploymentType { get; set; } = EmploymentType.FullTime;
     [Column("EmploymentStartDate")]
     public DateOnly EmploymentStartDate { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow);
     [Column("EmploymentEndDate")]
@@ -27,8 +27,6 @@ public class User
 
     [NotColumn]
     public ICollection<WorkScheduleEntry> WorkScheduleEntries { get; set; } = new List<WorkScheduleEntry>();
-    [NotColumn]
-    public ICollection<SalaryHistory> SalaryHistory { get; set; } = new List<SalaryHistory>();
     [NotColumn]
     public ICollection<HolidayBalance> HolidayBalances { get; set; } = new List<HolidayBalance>();
     [NotColumn]

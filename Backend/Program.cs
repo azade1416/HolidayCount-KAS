@@ -13,6 +13,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddScoped<AppDbContext>(_ => new AppDbContext(connectionString));
 
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IHolidayService, HolidayService>();
 
 var jwtKey = JwtConfiguration.GetSigningKey(builder.Configuration["Jwt:Key"]);
 var keyBytes = Encoding.UTF8.GetBytes(jwtKey);

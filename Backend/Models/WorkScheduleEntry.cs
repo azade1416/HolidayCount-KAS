@@ -12,8 +12,10 @@ public class WorkScheduleEntry
     public Guid UserId { get; set; }
     [Column("DayOfWeek")]
     public DayOfWeek DayOfWeek { get; set; }
-    [Column("Hours")]
-    public decimal Hours { get; set; }
+    [Column("StartTime")]
+    public TimeOnly StartTime { get; set; } = new(8, 0);
+    [Column("EndTime")]
+    public TimeOnly EndTime { get; set; } = new(16, 0);
     [Column("EffectiveFrom")]
     public DateOnly EffectiveFrom { get; set; }
     [Column("EffectiveTo")]

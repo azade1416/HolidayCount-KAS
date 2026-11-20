@@ -12,6 +12,10 @@ public class LeaveRequest
     public Guid UserId { get; set; }
     [Column("AccountType")]
     public HolidayAccountType AccountType { get; set; }
+    [Column("RequestType")]
+    public LeaveRequestType RequestType { get; set; } = LeaveRequestType.Holiday;
+    [Column("OriginalRequestId")]
+    public Guid? OriginalRequestId { get; set; }
     [Column("StartDate")]
     public DateOnly StartDate { get; set; }
     [Column("EndDate")]

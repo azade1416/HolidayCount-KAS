@@ -12,12 +12,8 @@ public class MonthlyAccrual
     public Guid HolidayBalanceId { get; set; }
     [Column("AccrualMonth")]
     public DateOnly AccrualMonth { get; set; }
-    [Column("EarnedDays")]
-    public decimal EarnedDays { get; set; }
     [Column("EarnedHours")]
     public decimal EarnedHours { get; set; }
-    [Column("QualifyingSalary")]
-    public decimal QualifyingSalary { get; set; }
     [Column("CreatedAtUtc")]
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
