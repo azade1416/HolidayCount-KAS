@@ -11,17 +11,6 @@ import type { MockHolidayAccount, MockRequest, WeeklySchedule } from "../employe
 import type { Employee as EmployeeType } from "../employee";
 import HolidayCalendar from "./HolidayCalendar";
 
-const balanceLabels = ["Accrued holiday", "Used holiday", "Total holiday left"];
-const historyColumns = [
-    { title: "Type", value: (request: MockRequest) => request.type ?? "Holiday" },
-    { title: "Account", value: (request: MockRequest) => request.account },
-    { title: "Dates", value: (request: MockRequest) => `${request.startDate} – ${request.endDate}` },
-    { title: "Status", value: (request: MockRequest) => request.status },
-    { title: "Submitted", value: (request: MockRequest) => request.submittedDate },
-    { title: "Decision", value: (request: MockRequest) => request.decisionDate || "—" }
-];
-const balanceKeys = ["accrued", "used", "remaining"] as const;
-
 function Employee() {
     const navigate = useNavigate();
     const [user, setUser] = useState<PublicUser | null>(null);
@@ -161,9 +150,9 @@ function Employee() {
                         <Fragment key={a.id}>
                             {i > 0 && <hr className="employee-divider" />}
                             <h3>{a.name}</h3>
-                            {balanceKeys.map((key, index) => (
+                            {(["accrued", "used", "remaining"] as const).map((key, index) => (
                                 <div key={key} className="balance-row">
-                                    {balanceLabels[index]}
+                                    {["Accrued holiday", "Used holiday", "Total holiday left"][index]}
                                     <div className="balance-value">{a[key].hours} hours</div>
                                 </div>
                             ))}
@@ -230,18 +219,17 @@ function Employee() {
                 <div className="calendar-scroll">
                     <table className="employee-table history-table">
                         <thead>
-                        <tr>{historyColumns.map(column => (
-                            <th key={column.title} className="employee-cell left">{column.title}</th>
-                        ))}</tr>
+                        <tr>{["Type", "Account", "Dates", "Status", "Submitted", "Decision"].map(x =>
+                            <th key={x} className="employee-cell left">{x}</th>
+                        )}</tr>
                         </thead>
                         <tbody>
                         {history.map(r => (
                             <tr key={r.id}>
-                                {historyColumns.map(column => (
-                                    <td key={column.title} className="employee-cell left">
-                                        {column.value(r)}
-                                    </td>
-                                ))}
+                                {[r.type ?? "Holiday", r.account, `${r.startDate} – ${r.endDate}`,
+                                    r.status, r.submittedDate, r.decisionDate || "—"].map((x, i) =>
+                                    <td key={i} className="employee-cell left">{x}</td>
+                                )}
                             </tr>
                         ))}
                         {!history.length && <tr><td colSpan={6} className="employee-cell">No requests yet.</td></tr>}

@@ -30,7 +30,10 @@ function HolidayCalendar({ month, employees, approved }: Props) {
 
     return (
         <div className="calendar-scroll">
-            <div className="calendar-grid" style={{ gridTemplateColumns: `140px repeat(${days}, 38px)` }}>
+            <div
+                className="calendar-grid"
+                style={{ "--calendar-days": days } as React.CSSProperties}
+            >
                 <div className="calendar-name calendar-name-heading">Employee</div>
                 {dates.map(day => (
                     <div key={day} className="calendar-day">

@@ -12,18 +12,6 @@ import type { PublicUser } from "../admin";
 import type { Employee as EmployeeType } from "../employee";
 import HolidayCalendar from "./HolidayCalendar";
 
-const balanceColumns = [
-    { title: "Holiday account", value: (account: MockHolidayAccount) => account.name },
-    { title: "Accrued holiday", value: (account: MockHolidayAccount) => `${account.accrued.hours} hours` },
-    { title: "Used holiday", value: (account: MockHolidayAccount) => `${account.used.hours} hours` },
-    { title: "Total holiday left", value: (account: MockHolidayAccount) => `${account.remaining.hours} hours` },
-    { title: "Eligible date", value: (account: MockHolidayAccount) => account.eligibleDate || "—" }
-];
-
-function EmptyTableRow({ columns, children }: { columns: number; children: string }) {
-    return <tr><td colSpan={columns}>{children}</td></tr>;
-}
-
 function Accountant() {
     const [requests, setRequests] = useState<AccountantRequest[]>([]);
     const [history, setHistory] = useState<MockRequest[]>([]);
@@ -118,7 +106,7 @@ function Accountant() {
                             </tr>
                         );
                     })}
-                    {!requests.length && <EmptyTableRow columns={6}>No pending requests.</EmptyTableRow>}
+                    {!requests.length && <tr><td colSpan={6}>No pending requests.</td></tr>}
                     </tbody>
                 </table>
             </div>
@@ -142,7 +130,7 @@ function Accountant() {
                             <td>{r.status === "Rejected" ? "Declined" : r.status}</td>
                         </tr>
                     ))}
-                    {!history.length && <EmptyTableRow columns={5}>No completed requests.</EmptyTableRow>}
+                    {!history.length && <tr><td colSpan={5}>No completed requests.</td></tr>}
                     </tbody>
                 </table>
             </div>
@@ -177,24 +165,22 @@ function Accountant() {
                             <table className="accountant-table">
                                 <thead>
                                 <tr>
-                                    {balanceColumns.map(column => (
-                                        <th key={column.title} className="accountant-cell">{column.title}</th>
-                                    ))}
+                                    { ["Holiday account", "Accrued holiday", "Used holiday", "Total holiday left", "Eligible date"].map(x =>
+                                        <th key={x} className="accountant-cell">{x}</th>
+                                    )}
                                 </tr>
                                 </thead>
                                 <tbody>
                                 {accounts.map(a => (
                                     <tr key={a.id}>
-                                        {balanceColumns.map(column => (
-                                            <td key={column.title} className="accountant-cell">
-                                                {column.value(a)}
-                                            </td>
-                                        ))}
+                                        <td className="accountant-cell">{a.name}</td>
+                                        <td className="accountant-cell">{a.accrued.hours} hours</td>
+                                        <td className="accountant-cell">{a.used.hours} hours</td>
+                                        <td className="accountant-cell">{a.remaining.hours} hours</td>
+                                        <td className="accountant-cell">{a.eligibleDate || "—"}</td>
                                     </tr>
                                 ))}
-                                {!accounts.length && (
-                                    <tr><td colSpan={5} className="accountant-cell">No holiday accounts found.</td></tr>
-                                )}
+                                {!accounts.length && <tr><td colSpan={5} className="accountant-cell">No holiday accounts found.</td></tr>}
                                 </tbody>
                             </table>
                         </div>

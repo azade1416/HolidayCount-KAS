@@ -218,7 +218,7 @@ button:disabled {
 .calendar-card, .history-card { margin-top: 18px; }
 .calendar-heading { display: flex; justify-content: space-between; align-items: center; }
 .calendar-scroll { overflow-x: auto; }
-.calendar-grid { display: grid; width: max-content; }
+.calendar-grid { display: grid; width: max-content; grid-template-columns: 140px repeat(var(--calendar-days), 38px); }
 .calendar-name { position: sticky; left: 0; z-index: 1; padding: 8px; border-bottom: 1px solid #eee; background: white; }
 .calendar-name-heading { z-index: 2; }
 .calendar-day { display: grid; place-content: center; width: 38px; height: 48px; border: 1px solid #ddd; text-align: center; font-size: 11px; }

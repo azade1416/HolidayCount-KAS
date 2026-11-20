@@ -72,11 +72,6 @@ function Admin() {
         }
     };
 
-    function editUser(user: PublicUser) {
-        setSelectedUser(user);
-        setShowModal(true);
-    }
-
     return (
         <div className="dashboard">
             <div className="header">
@@ -108,12 +103,15 @@ function Admin() {
                             <td>{user.name}</td>
                             <td>{user.email}</td>
                             <td>
-                                    <span className={user.role === "Admin" ? "badge admin" : "badge user"}>
+                                    <span className={`badge ${user.role === "Admin" ? "admin" : "user"}`}>
                                         {user.employmentType || user.role}
                                     </span>
                             </td>
                             <td>
-                                <button className="edit" onClick={() => editUser(user)}>
+                                <button className="edit" onClick={() => {
+                                    setSelectedUser(user);
+                                    setShowModal(true);
+                                }}>
                                     Edit
                                 </button>
 
