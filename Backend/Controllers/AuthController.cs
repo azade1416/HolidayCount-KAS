@@ -66,7 +66,7 @@ public class AuthController : ControllerBase
     public IActionResult Logout() => NoContent();
     
     [HttpGet("users")]
-    [Authorize] 
+    [Authorize(Roles = "admin,accountant")]
     public async Task<IActionResult> GetAllUsers()
     {
         var currentUser = await _authService.ValidateAndGetUserAsync(User);
