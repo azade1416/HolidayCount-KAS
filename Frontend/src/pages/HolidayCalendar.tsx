@@ -6,10 +6,9 @@ type Props = {
     month: Date;
     employees: Employee[];
     approved: MockRequest[];
-    showEmployeeNames?: boolean;
 };
 
-function HolidayCalendar({ month, employees, approved, showEmployeeNames = false }: Props) {
+function HolidayCalendar({ month, employees, approved }: Props) {
     const year = month.getFullYear();
     const monthIndex = month.getMonth();
     const days = new Date(year, monthIndex + 1, 0).getDate();
@@ -42,7 +41,7 @@ function HolidayCalendar({ month, employees, approved, showEmployeeNames = false
 
                 {employees.map(employee => (
                     <Fragment key={employee.id}>
-                        {showEmployeeNames && <div className="calendar-name">{employee.name}</div>}
+                        <div className="calendar-name">{employee.name}</div>
                         {dates.map(day => {
                             const date = dateKey(day);
                             const holiday = hasHoliday(employee.id, date);

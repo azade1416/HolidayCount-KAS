@@ -144,7 +144,7 @@ function Employee() {
                         )}
                     </select>
 
-                    <button onClick={submitCancellation} disabled={!approvedHolidays.length}>
+                    <button onClick={submitCancellation}>
                         Submit cancellation request
                     </button>
                     {error && <p className="employee-error">{error}</p>}
@@ -222,7 +222,7 @@ function Employee() {
                     </div>
                 </div>
 
-                <HolidayCalendar month={month} employees={employees} approved={approved} showEmployeeNames />
+                <HolidayCalendar month={month} employees={employees} approved={approved} />
             </div>
 
             <div className="employee-card history-card">

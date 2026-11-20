@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import {
     createEmployee, updateUser, createDefaultSchedule, WORKDAYS, EMPLOYMENT_TYPES,
     DEFAULT_EMPLOYMENT_TYPE,
@@ -94,7 +94,7 @@ function CreateEmployee({ user, onClose, onCreated }: Props) {
 
                 <form onSubmit={submit}>
                     {accountFields.map(field => (
-                        <div className="form-field" key={field.name}>
+                        <Fragment key={field.name}>
                             <label>{field.label}</label>
                             <input
                                 name={field.name}
@@ -103,7 +103,7 @@ function CreateEmployee({ user, onClose, onCreated }: Props) {
                                 required={field.required}
                                 placeholder={field.placeholder}
                             />
-                        </div>
+                        </Fragment>
                     ))}
 
                     <label>Role</label>
