@@ -30,7 +30,13 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public async Task<string> TokenForNewUser(string role)
     {
         using var scope = Services.CreateScope();
-        var user = new User { Fullname = role, Username = $"{role}-{Guid.NewGuid()}", PasswordHash = "unused", Role = role };
+        var user = new User
+        {
+            FullName = role,
+            Email = $"{role}-{Guid.NewGuid()}@example.com",
+            PasswordHash = "unused",
+            Role = role
+        };
         await scope.ServiceProvider.GetRequiredService<AppDbContext>().InsertAsync(user);
         return scope.ServiceProvider.GetRequiredService<ITokenService>().GenerateToken(user);
     }

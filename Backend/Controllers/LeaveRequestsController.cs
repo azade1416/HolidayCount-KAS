@@ -11,6 +11,7 @@ namespace Backend.Controllers;
 
 [ApiController]
 [Route("api/leave-requests")]
+[Route("api/leaverequests")]
 [Authorize]
 public class LeaveRequestsController : ControllerBase
 {
@@ -33,6 +34,46 @@ public class LeaveRequestsController : ControllerBase
 
         try
         {
+            if (dto.AccountId == Guid.Empty)
+            {
+                var accountType = dto.AccountType ?? HolidayAccountType.Weeks1To5;
+                var balance = await _db.HolidayBalances.FirstOrDefaultAsync(x =>
+                    x.UserId == user.Id && x.AccountType == accountType);
+                if (balance == null)
+                {
+                    balance = new HolidayBalance
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = user.Id,
+                        AccountType = accountType,
+                        EarningYear = dto.StartDate.Year,
+                        EarningPeriodStart = dto.StartDate,
+                        EarningPeriodEnd = dto.EndDate,
+                        UsagePeriodStart = dto.StartDate,
+                        UsagePeriodEnd = dto.EndDate
+                    };
+                    await _db.InsertAsync(balance);
+                }
+
+                var legacyRequest = new LeaveRequest
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = user.Id,
+                    AccountType = accountType,
+                    RequestType = LeaveRequestType.Holiday,
+                    StartDate = dto.StartDate,
+                    EndDate = dto.EndDate,
+                    RequestedDays = dto.RequestedDays,
+                    RequestedHours = dto.RequestedHours == 0
+                        ? dto.RequestedDays * 7.4m
+                        : dto.RequestedHours,
+                    SubmittedAtUtc = DateTime.UtcNow,
+                    Status = LeaveRequestStatus.Pending
+                };
+                await _db.InsertAsync(legacyRequest);
+                return CreatedAtAction(nameof(GetById), new { id = legacyRequest.Id }, legacyRequest);
+            }
+
             var result = await _holidays.CreateHolidayAsync(user.Id, dto.AccountId, dto.StartDate, dto.EndDate);
             return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
         }
@@ -132,7 +173,8 @@ public class LeaveRequestsController : ControllerBase
     {
         var user = await _tokens.ValidateAndGetUserAsync(User);
         if (user == null) return Unauthorized();
-        var request = await _db.LeaveRequests.FirstOrDefaultAsync(x => x.Id == id);
+        var request = await _db.LeaveRequests.FirstOrDefaultAsync(x =>
+            x.Id == id && (user.Role != "employee" || x.UserId == user.Id));
         if (request == null) return NotFound();
         if (user.Role == "employee" && request.UserId != user.Id) return Forbid();
         return Ok(request);

@@ -29,7 +29,8 @@ public class HolidayAccountsController : ControllerBase
     {
         var current = await _tokens.ValidateAndGetUserAsync(User);
         if (current == null) return Unauthorized();
-        if (current.Role == "employee" && current.Id != employeeId) return Forbid();
+        if (current.Role == "employee" && current.Id != employeeId)
+            return NotFound();
 
         var accounts = await _db.HolidayBalances.Where(x => x.UserId == employeeId).ToListAsync();
         return Ok(accounts.Select(x => new
@@ -50,7 +51,8 @@ public class HolidayAccountsController : ControllerBase
     {
         var current = await _tokens.ValidateAndGetUserAsync(User);
         if (current == null) return Unauthorized();
-        if (current.Role == "employee" && current.Id != employeeId) return Forbid();
+        if (current.Role == "employee" && current.Id != employeeId)
+            return NotFound();
 
         var entries = await _db.WorkScheduleEntries
             .Where(x => x.UserId == employeeId && (x.EffectiveTo == null || x.EffectiveTo >= DateOnly.FromDateTime(DateTime.UtcNow)))
@@ -75,7 +77,12 @@ public class HolidayAccountsController : ControllerBase
     public async Task<IActionResult> Employees()
     {
         var users = await _db.Users.Where(x => x.Role == "employee").ToListAsync();
-        return Ok(users.Select(x => new { x.Id, name = x.FullName, role = x.EmploymentType.ToString() }));
+        return Ok(users.Select(x => new
+        {
+            x.Id,
+            name = x.FullName,
+            role = x.EmploymentType.ToFrontendString()
+        }));
     }
 
     [HttpGet("holiday-accounts/future-balance")]

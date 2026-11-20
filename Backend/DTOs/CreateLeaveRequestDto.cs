@@ -5,8 +5,12 @@ namespace Backend.DTOs;
 
 public class CreateLeaveRequestDto : IValidatableObject
 {
-    [Required]
     public Guid AccountId { get; set; }
+    public HolidayAccountType? AccountType { get; set; }
+    [Range(0.001, double.MaxValue)]
+    public decimal RequestedDays { get; set; }
+    [Range(0, double.MaxValue)]
+    public decimal RequestedHours { get; set; }
 
     [Required]
     public DateOnly StartDate { get; set; }

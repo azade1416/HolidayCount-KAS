@@ -41,7 +41,10 @@ public class AuthController : ControllerBase
             token = token, 
             name = user.FullName,
             email = user.Email,
-            role = user.Role 
+            role = user.Role,
+            employmentType = user.Role == "employee"
+                ? user.EmploymentType.ToFrontendString()
+                : null
         });
     }
 
@@ -57,7 +60,9 @@ public class AuthController : ControllerBase
             name = user.FullName,
             email = user.Email,
             role = user.Role,
-            employmentType = user.EmploymentType.ToString()
+            employmentType = user.Role == "employee"
+                ? user.EmploymentType.ToFrontendString()
+                : null
         });
     }
 
@@ -75,8 +80,17 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = "User no longer exists or token is invalid" });
         }
         
-        var users = await _context.Users.Select(u => new { u.Id, u.FullName, u.Email, u.Role, u.EmploymentType }).ToListAsync();
-        return Ok(users);
+        var users = await _context.Users.ToListAsync();
+        return Ok(users.Select(u => new
+        {
+            u.Id,
+            u.FullName,
+            u.Email,
+            u.Role,
+            employmentType = u.Role == "employee"
+                ? u.EmploymentType.ToFrontendString()
+                : null
+        }));
     }
     
     [HttpPost("users")]
@@ -139,9 +153,6 @@ public class AuthController : ControllerBase
             return NotFound(new { message = "User not found" });
         }
         
-        if (!string.IsNullOrEmpty(dto.FullName))
-            targetUser.FullName = dto.FullName;
-
         if (!string.IsNullOrEmpty(dto.Password))
         {
             targetUser.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);

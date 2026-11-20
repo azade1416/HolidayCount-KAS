@@ -6,6 +6,20 @@ public enum EmploymentType
     PartTime
 }
 
+public static class EmploymentTypeExtensions
+{
+    public static string? ToFrontendString(this EmploymentType employmentType)
+        => ((EmploymentType?)employmentType).ToFrontendString();
+
+    public static string? ToFrontendString(this EmploymentType? employmentType)
+        => employmentType switch
+        {
+            EmploymentType.FullTime => "Full-time employee",
+            EmploymentType.PartTime => "Part-time employee",
+            _ => null
+        };
+}
+
 public enum HolidayAccountType
 {
     Weeks1To5,
