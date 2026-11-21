@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { login } from "../mockApi";
@@ -5,7 +6,6 @@ import { login } from "../mockApi";
 function Login() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
-
     const navigate = useNavigate();
 
     const handleLogin = async () => {
@@ -17,12 +17,7 @@ function Login() {
                 return;
             }
 
-            navigate(
-                user.role === "Accountant" ? "/accountant" :
-                    user.role === "Admin" ? "/admin" :
-                        "/employee"
-            );
-
+            navigate(`/${user.role.toLowerCase()}`);
         } catch (error) {
             console.error("Login error:", error);
             alert("Something went wrong. Please try again.");
@@ -34,24 +29,14 @@ function Login() {
             <h1>Log in</h1>
 
             <label>Email</label>
-            <input
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-            />
+            <input type="email" placeholder="Email" value={email}
+                   onChange={(e) => setEmail(e.target.value)} />
 
             <label>Password</label>
-            <input
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-            />
+            <input type="password" placeholder="Password" value={password}
+                   onChange={(e) => setPassword(e.target.value)} />
 
-            <button onClick={handleLogin}>
-                Enter dashboard
-            </button>
+            <button onClick={handleLogin}>Enter dashboard</button>
         </div>
     );
 }
