@@ -8,7 +8,9 @@ function HolidayCalendar({ month, employees, approved }: Props) {
     const m = month.getMonth();
     const length = new Date(year, m + 1, 0).getDate();
     const dates = Array.from({ length }, (_, i) => new Date(year, m, i + 1));
-    const isoDates = dates.map(d => d.toLocaleDateString("sv"));
+    const isoDates = dates.map(d =>
+        `${year}-${String(m + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+    );
 
     const onHoliday = (id: string, date: string) =>
         approved.some(r =>
