@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
     getUsers, getCurrentUser, deleteUser,
     sendAnnouncement, getAnnouncements, getScheduleHistory, WORKDAYS
-} from "../mockApi";
+} from "../api";
 import type { PublicUser, Announcement } from "../admin";
 import type { ScheduleChange, WeeklySchedule } from "../employee";
 import CreateEmployee from "./CreateEmployee";

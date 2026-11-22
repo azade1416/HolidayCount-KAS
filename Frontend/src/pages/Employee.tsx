@@ -4,7 +4,7 @@ import {
     getCurrentUser, getHolidayAccounts, getEmployeeRequestHistory,
     getApprovedHolidayRequests, getEmployees, createHolidayRequest,
     createCancellationRequest, logout, CALENDAR_WEEKDAYS
-} from "../mockApi";
+} from "../api";
 import type { PublicUser } from "../admin";
 import type { MockHolidayAccount, MockRequest, WeeklySchedule, Employee as EmployeeType } from "../employee";
 import HolidayCalendar from "./HolidayCalendar";

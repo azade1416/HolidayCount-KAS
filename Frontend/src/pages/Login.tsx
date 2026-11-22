@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { login } from "../mockApi";
+import { login } from "../api";
 
 function Login() {
     const [form, setForm] = useState({ email: "", password: "" });
