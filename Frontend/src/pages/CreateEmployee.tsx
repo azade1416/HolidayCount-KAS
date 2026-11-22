@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import {
     createEmployee, updateUser, createDefaultSchedule, WORKDAYS, EMPLOYMENT_TYPES,
@@ -18,55 +17,34 @@ function CreateEmployee({ user, onClose, onCreated }: Props) {
         (user?.role === "Employee" ? DEFAULT_EMPLOYMENT_TYPE : user?.role ?? DEFAULT_EMPLOYMENT_TYPE);
     const [role, setRole] = useState(startingRole);
     const [schedule, setSchedule] = useState(user?.weeklySchedule ?? createDefaultSchedule());
-
     const isEmployee = role === EMPLOYMENT_TYPES[0] || role === EMPLOYMENT_TYPES[1];
 
     const update = (day: keyof WeeklySchedule, field: "from" | "to", value: string) =>
-        setSchedule((prev: WeeklySchedule) => ({ ...prev, [day]: { ...prev[day], [field]: value } }));
+        setSchedule(prev => ({ ...prev, [day]: { ...prev[day], [field]: value } }));
 
     const submit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
 
-        const data = new FormData(e.currentTarget);
-        const valid = (time: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
-
-        if (isEmployee && WORKDAYS.some(day =>
-            !valid(schedule[day].from) ||
-            !valid(schedule[day].to) ||
-            schedule[day].from >= schedule[day].to
-        )) {
-            alert("Enter valid working hours (HH:MM).");
+        if (isEmployee && WORKDAYS.some(day => schedule[day].from >= schedule[day].to)) {
+            alert("Enter valid working hours.");
             return;
         }
 
+        const data = new FormData(e.currentTarget);
+        const password = String(data.get("password"));
+        const account = {
+            name: String(data.get("name")),
+            email: String(data.get("email")),
+            employmentType: role,
+            weeklySchedule: isEmployee ? schedule : undefined,
+        };
+
         try {
-            const name = String(data.get("name"));
-            const email = String(data.get("email"));
-            const password = String(data.get("password"));
-
             if (user) {
-                await updateUser(user.id, {
-                    name,
-                    email,
-                    ...(password ? { password } : {}),
-                    employmentType: role,
-                    weeklySchedule: isEmployee ? schedule : undefined
-                });
+                await updateUser(user.id, { ...account, ...(password ? { password } : {}) });
             } else {
-                if (!password) {
-                    alert("Please enter a password.");
-                    return;
-                }
-
-                await createEmployee({
-                    name,
-                    email,
-                    password,
-                    employmentType: role,
-                    weeklySchedule: isEmployee ? schedule : undefined
-                });
+                await createEmployee({ ...account, password });
             }
-
             onCreated();
             onClose();
         } catch (error) {
@@ -81,10 +59,10 @@ function CreateEmployee({ user, onClose, onCreated }: Props) {
 
                 <form onSubmit={submit}>
                     <label>Full name</label>
-                    <input name="name" defaultValue={user?.name || ""} required />
+                    <input name="name" defaultValue={user?.name} required />
 
                     <label>Email</label>
-                    <input name="email" type="email" defaultValue={user?.email || ""} required />
+                    <input name="email" type="email" defaultValue={user?.email} required />
 
                     <label>Password</label>
                     <input
@@ -96,9 +74,7 @@ function CreateEmployee({ user, onClose, onCreated }: Props) {
 
                     <label>Role</label>
                     <select value={role} onChange={e => setRole(e.target.value)}>
-                        {EMPLOYMENT_TYPES.map(r =>
-                            <option key={r}>{r}</option>
-                        )}
+                        {EMPLOYMENT_TYPES.map(r => <option key={r}>{r}</option>)}
                     </select>
 
                     {isEmployee && (
@@ -114,17 +90,15 @@ function CreateEmployee({ user, onClose, onCreated }: Props) {
                             {WORKDAYS.map(day => (
                                 <div className="schedule-row" key={day}>
                                     <strong>{day}</strong>
-
-                                    <input
-                                        value={schedule[day].from}
-                                        onChange={e => update(day, "from", e.target.value)}
-                                        required
-                                    />
-                                    <input
-                                        value={schedule[day].to}
-                                        onChange={e => update(day, "to", e.target.value)}
-                                        required
-                                    />
+                                    {(["from", "to"] as const).map(field => (
+                                        <input
+                                            key={field}
+                                            type="time"
+                                            value={schedule[day][field]}
+                                            onChange={e => update(day, field, e.target.value)}
+                                            required
+                                        />
+                                    ))}
                                 </div>
                             ))}
                         </div>

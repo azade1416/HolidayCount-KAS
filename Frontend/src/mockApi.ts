@@ -91,20 +91,13 @@ let holidayRequests: MockRequest[] = [
     },
     {
         id: "2", employeeId: "1", employee: "John Carter",
-        account: "Weeks 1–5", startDate: "2026-12-01",
-        endDate: "2026-12-05", type: "Cancellation",
-        originalRequestId: "1", status: "Pending",
-        submittedDate: "2026-11-17", decisionDate: ""
-    },
-    {
-        id: "3", employeeId: "1", employee: "John Carter",
         account: "Week 6", startDate: "2026-12-14",
         endDate: "2026-12-18", type: "Holiday",
         status: "Pending", submittedDate: "2026-11-18",
         decisionDate: ""
     },
     {
-        id: "4", employeeId: "1", employee: "John Carter",
+        id: "3", employeeId: "1", employee: "John Carter",
         account: "Weeks 1–5", startDate: "2026-10-05",
         endDate: "2026-10-09", type: "Holiday",
         status: "Rejected", submittedDate: "2026-09-20",
@@ -116,7 +109,7 @@ let announcements: Announcement[] = [];
 let scheduleHistory: Record<string, ScheduleChange[]> = {};
 
 let nextUserId = 4;
-let nextRequestId = 5;
+let nextRequestId = 4;
 let nextAnnouncementId = 1;
 let nextScheduleChangeId = 1;
 

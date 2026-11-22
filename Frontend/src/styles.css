@@ -1,87 +1,11 @@
-* {
-    box-sizing: border-box;
-}
+/* ==========================================================================
+   SHARED
+   ========================================================================== */
 
-body {
-    margin: 0;
-    font-family: Arial;
-    background: #f5f6f2;
-}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: Arial; background: #f5f6f2; }
 
-/* Login */
-.login {
-    width: 400px;
-    margin: 100px auto;
-    padding: 30px;
-    background: white;
-    border-radius: 10px;
-}
-
-.login h1 { text-align: center; }
-.login label { display: block; margin-top: 20px; }
-.login input { width: 100%; padding: 10px; margin-top: 5px; }
-.login button { padding: 12px; margin-top: 15px; cursor: pointer; }
-.login button:last-child { width: 100%; }
-
-/* Dashboard */
-.dashboard { padding: 30px 4%; }
-
-.header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 20px;
-    margin-bottom: 70px;
-}
-
-.header p,
-.header h1 {
-    margin: 5px;
-    color: black;
-    font-size: 30px;
-    font-weight: bold;
-}
-
-.header > div { display: flex; gap: 10px; }
-.header button { width: 230px; padding: 12px; margin: 0; cursor: pointer; }
-
-/* Sections */
-.section {
-    background: white;
-    padding: 24px;
-    border: 1px solid #ddd;
-    border-radius: 15px;
-    margin-bottom: 30px;
-}
-
-.section h2 { padding: 20px; margin: 0; border-bottom: 1px solid #ddd; }
-
-/* Tables */
-.table {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;
-    text-align: left;
-}
-
-.table th,
-.table td { padding: 14px; border-bottom: 1px solid #ddd; }
-
-.table-header,
-.table-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1.5fr 1fr 1.3fr 1.5fr;
-    align-items: center;
-    gap: 15px;
-    padding: 15px 20px;
-    border-bottom: 1px solid #eee;
-}
-
-.table-header p { color: #777; font-size: 12px; }
-.table-row p { margin: 5px 0; }
-.table-row div p:last-child { color: #888; }
-
-/* Buttons */
+/* Default button */
 button {
     background: #87ceeb;
     color: #173747;
@@ -94,72 +18,76 @@ button {
     cursor: pointer;
     transition: all 0.2s ease;
 }
+button:hover { background: #70b9d8; color: white; }
+button:disabled { background: #c5cbc6; color: white; cursor: not-allowed; }
 
-button:hover {
-    background: #70b9d8;
-    color: white;
-}
-
-button:disabled {
-    background: #c5cbc6;
-    color: white;
-    cursor: not-allowed;
-}
-
-/* Admin Edit and Delete */
-.edit {
-    background: #174333;
-    color: white;
-    border: none;
-}
-
-.edit:hover { background: #23634b; }
-
-.delete {
-    background: #fff0f0;
-    color: #a76565;
-    border: 1px solid #f0caca;
-}
-
-.delete:hover {
-    background: #a76565;
-    color: white;
-}
-
-/* Accountant Approve and Decline */
-.table td button:first-child {
-    background: #174333;
-    color: white;
-    border: none;
-}
-
+/* Buttons inside .table cells: approve, decline, and a lone history button
+   (order matters: only-child overrides the other two) */
+.table td button:first-child { background: #174333; color: white; border: none; }
 .table td button:first-child:hover { background: #23634b; }
-
-.table td button:last-child {
-    background: #c0392b;
-    color: white;
-    border: none;
-}
-
+.table td button:last-child { background: #c0392b; color: white; border: none; }
 .table td button:last-child:hover { background: #a52e23; }
+.table td button:only-child { background: #87ceeb; color: #173747; border: 1px solid #70b9d8; }
+.table td button:only-child:hover { background: #70b9d8; color: white; }
 
-/* Working Schedule History stays sky blue */
-.table td button:only-child {
-    background: #87ceeb;
-    color: #173747;
-    border: 1px solid #70b9d8;
-}
+/* Tables */
+.table, .employee-table, .accountant-table { width: 100%; border-collapse: collapse; }
 
-.table td button:only-child:hover {
-    background: #70b9d8;
-    color: white;
-}
+/* Full-screen overlays (admin modal and accountant dialog) */
+.modal-overlay, .accountant-overlay { position: fixed; inset: 0; display: grid; place-items: center; }
+.modal-overlay { background: #0008; }
+.accountant-overlay { z-index: 1000; padding: 20px; background: rgba(0, 0, 0, .5); }
 
-/* Other */
-.badge,
-.current { color: #174333; }
 
+/* ==========================================================================
+   LOGIN PAGE
+   ========================================================================== */
+
+.login { width: 400px; margin: 100px auto; padding: 30px; background: white; border-radius: 10px; }
+.login h1 { text-align: center; }
+.login label { display: block; margin-top: 20px; }
+.login input { width: 100%; padding: 10px; margin-top: 5px; }
+.login button { padding: 12px; margin-top: 15px; cursor: pointer; }
+.login button:last-child { width: 100%; }
+
+
+/* ==========================================================================
+   ADMIN DASHBOARD
+   ========================================================================== */
+
+/* Header */
+.dashboard { padding: 30px 4%; }
+.header { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 70px; }
+.header p, .header h1 { margin: 5px; color: black; font-size: 30px; font-weight: bold; }
+.header > div, .header-actions { display: flex; gap: 10px; }
+.header button { width: 230px; padding: 12px; margin: 0; }
+
+/* Sections */
+.section { background: white; padding: 24px; border: 1px solid #ddd; border-radius: 15px; margin-bottom: 30px; }
+.section h2 { padding: 20px; margin: 0; border-bottom: 1px solid #ddd; }
+.badge, .current { color: #174333; }
 .admin .current { padding: 8px 10px; font-size: 13px; font-weight: 600; }
+
+/* Edit / delete buttons */
+.edit { background: #174333; color: white; border: none; }
+.edit:hover { background: #23634b; }
+.delete { background: #fff0f0; color: #a76565; border: 1px solid #f0caca; }
+.delete:hover { background: #a76565; color: white; }
+
+/* Table */
+.table { table-layout: fixed; text-align: left; }
+.table th, .table td { padding: 14px; border-bottom: 1px solid #ddd; }
+.table-header, .table-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.5fr 1fr 1.3fr 1.5fr;
+    align-items: center;
+    gap: 15px;
+    padding: 15px 20px;
+    border-bottom: 1px solid #eee;
+}
+.table-header p { color: #777; font-size: 12px; }
+.table-row p { margin: 5px 0; }
+.table-row div p:last-child { color: #888; }
 
 /* Announcements */
 .announcements { padding: 15px; }
@@ -167,31 +95,115 @@ button:disabled {
 .announcements textarea { max-width: 700px; }
 .announcements > div { padding: 6px 0 !important; }
 .announcements > div p { margin: 5px 0; }
+.announcement-input { width: 100%; padding: 10px; }
+.announcement-item { padding: 12px 0; border-bottom: 1px solid #ddd; }
 
 /* Modal */
-.modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: #0008;
-    display: grid;
-    place-items: center;
-}
-
 .modal { background: white; padding: 25px; width: 450px; }
 .modal form { display: grid; gap: 10px; }
 
-/* Weekly Schedule */
+/* Weekly schedule form (inside modal) */
 .weekly-schedule { margin-top: 20px; }
 .weekly-schedule h4 { margin-bottom: 15px; }
-
-.schedule-header,
-.schedule-row {
+.schedule-header, .schedule-row {
     display: grid;
     grid-template-columns: 110px 90px 90px;
     gap: 10px;
     align-items: center;
     margin-bottom: 10px;
 }
-
 .schedule-header { font-weight: bold; }
 .schedule-row input { width: 90px; padding: 6px; }
+.schedule-text { margin: 0; font-family: inherit; }
+
+
+/* ==========================================================================
+   EMPLOYEE DASHBOARD
+   ========================================================================== */
+
+/* Page and header */
+.employee-page { padding: 20px 3%; min-height: 100vh; }
+.employee-header { display: flex; justify-content: flex-end; gap: 14px; margin-bottom: 20px; }
+.employee-header button { padding: 7px 12px; }
+
+/* Two cards side by side */
+.employee-cards { display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; align-items: stretch; }
+.employee-card { padding: 14px; background: white; border-radius: 8px; }
+.calendar-card, .history-card { margin-top: 18px; }
+
+/* Left card: title column + fields column */
+.action-row {
+    display: grid;
+    grid-template-columns: 190px 1fr;
+    gap: 16px;
+    align-items: center;
+    padding: 14px 0;
+    border-bottom: 1px solid #e3e3e3;
+}
+.action-row:first-child { padding-top: 0; }
+.action-row:last-child { padding-bottom: 0; border-bottom: 0; }
+.action-row h3 { margin: 0; font-size: 16px; }
+.action-fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; }
+.action-fields button { margin: 0; }
+.action-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #555; }
+
+/* Form bits */
+.employee-input { display: block; min-width: 150px; padding: 8px; margin: 0; }
+.employee-error { color: red; font-size: 13px; align-self: center; }
+.employee-muted { color: #666; font-size: 13px; }
+.future-balance { flex-basis: 100%; padding: 10px; background: #f5f6f2; border-radius: 6px; }
+
+/* Right card: both tables same width and height */
+.employee-row { display: flex; flex-direction: column; gap: 24px; }
+.employee-row h3 { margin: 0; }
+.employee-row p { margin: 4px 0 0; }
+.employee-row .employee-table { flex: 1; table-layout: fixed; }
+.employee-row .employee-cell { padding: 12px 6px; overflow-wrap: anywhere; }
+
+/* Tables */
+.employee-cell { padding: 8px; border-bottom: 1px solid #eee; text-align: center; }
+.employee-cell.left { text-align: left; }
+.history-table { font-size: 13px; }
+
+/* Stack the two cards on narrow screens */
+@media (max-width: 900px) {
+    .employee-cards { grid-template-columns: 1fr; }
+    .action-row { grid-template-columns: 1fr; }
+}
+
+
+/* ==========================================================================
+   CALENDAR (employee dashboard)
+   ========================================================================== */
+
+.calendar-heading { display: flex; justify-content: space-between; align-items: center; }
+.calendar-heading > div { display: flex; align-items: center; gap: 4px; }
+.calendar-controls { display: flex; justify-content: center; align-items: center; gap: 15px; margin-bottom: 15px; }
+.calendar-scroll { overflow-x: auto; }
+.calendar-grid { display: grid; width: max-content; grid-template-columns: 140px repeat(var(--calendar-days), 38px); }
+.calendar-name { position: sticky; left: 0; z-index: 1; padding: 8px; border-bottom: 1px solid #eee; background: white; }
+.calendar-name-heading { z-index: 2; }
+.calendar-day { display: grid; place-content: center; width: 38px; height: 48px; border: 1px solid #ddd; text-align: center; font-size: 11px; }
+.calendar-square { width: 38px; height: 38px; border: 1px solid #ddd; background: white; }
+.calendar-square.holiday { background: #bde8c5; }
+
+
+/* ==========================================================================
+   ACCOUNTANT DASHBOARD
+   ========================================================================== */
+
+.employee-link { border: 0; background: none; color: #1674c4; text-decoration: underline; cursor: pointer; }
+.employee-link:hover { background: none; color: #1674c4; }
+
+.accountant-dialog {
+    width: 100%;
+    max-width: 1100px;
+    max-height: 80vh;
+    overflow-y: auto;
+    padding: 24px;
+    border-radius: 8px;
+    background: white;
+}
+.accountant-dialog.balance-dialog { max-width: 850px; }
+.dialog-heading { display: flex; justify-content: space-between; align-items: center; }
+.accountant-cell { padding: 10px; border-bottom: 1px solid #eee; text-align: left; }

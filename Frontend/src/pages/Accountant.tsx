@@ -1,5 +1,4 @@
-
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
     getRequests, getRequestHistory, getUsers, getHolidayAccounts,
@@ -7,240 +6,155 @@ import {
     approveRequest, rejectRequest, logout
 } from "../mockApi";
 import type { AccountantRequest } from "../accountant";
-import type { MockRequest, MockHolidayAccount } from "../employee";
+import type { MockRequest, MockHolidayAccount, Employee } from "../employee";
 import type { PublicUser } from "../admin";
-import type { Employee as EmployeeType } from "../employee";
+import HolidayCalendar from "./HolidayCalendar";
+
+const typeLabel = (type: string) => type === "Cancellation" ? "Cancel holiday" : "Request holiday";
+const position = (u?: PublicUser) => u?.employmentType || "—";
+
+function Table({ head, rows, empty, tableClass = "table", cellClass }: {
+    head: string[]; rows: { key: string; cells: ReactNode[] }[];
+    empty: string; tableClass?: string; cellClass?: string;
+}) {
+    return (
+        <table className={tableClass}>
+            <thead><tr>{head.map(h => <th key={h} className={cellClass}>{h}</th>)}</tr></thead>
+            <tbody>
+            {rows.map(r => (
+                <tr key={r.key}>{r.cells.map((c, i) => <td key={i} className={cellClass}>{c}</td>)}</tr>
+            ))}
+            {!rows.length && <tr><td colSpan={head.length} className={cellClass}>{empty}</td></tr>}
+            </tbody>
+        </table>
+    );
+}
+
+function Dialog({ title, onClose, className = "", children }: {
+    title: string; onClose: () => void; className?: string; children: ReactNode;
+}) {
+    return (
+        <div className="accountant-overlay">
+            <div className={`accountant-dialog ${className}`}>
+                <div className="dialog-heading"><h2>{title}</h2><button onClick={onClose}>✕</button></div>
+                {children}
+            </div>
+        </div>
+    );
+}
 
 function Accountant() {
     const [requests, setRequests] = useState<AccountantRequest[]>([]);
     const [history, setHistory] = useState<MockRequest[]>([]);
     const [users, setUsers] = useState<PublicUser[]>([]);
-    const [selectedEmployee, setSelectedEmployee] = useState<PublicUser | null>(null);
-    const [accounts, setAccounts] = useState<MockHolidayAccount[]>([]);
     const [approved, setApproved] = useState<MockRequest[]>([]);
-    const [employees, setEmployees] = useState<EmployeeType[]>([]);
+    const [employees, setEmployees] = useState<Employee[]>([]);
+    const [selected, setSelected] = useState<PublicUser | null>(null);
+    const [accounts, setAccounts] = useState<MockHolidayAccount[]>([]);
     const [showCalendar, setShowCalendar] = useState(false);
     const [month, setMonth] = useState(new Date());
     const [refresh, setRefresh] = useState(0);
     const navigate = useNavigate();
 
     useEffect(() => {
-        async function loadData() {
-            const [pending, completed, allUsers, holidays, staff] = await Promise.all([
-                getRequests(), getRequestHistory(), getUsers(),
-                getApprovedHolidayRequests(), getEmployees()
-            ]);
-            setRequests(pending);
-            setHistory(completed);
-            setUsers(allUsers);
-            setApproved(holidays);
-            setEmployees(staff);
-        }
-        void loadData();
+        Promise.all([getRequests(), getRequestHistory(), getUsers(), getApprovedHolidayRequests(), getEmployees()])
+            .then(([pending, completed, allUsers, holidays, staff]) => {
+                setRequests(pending); setHistory(completed); setUsers(allUsers);
+                setApproved(holidays); setEmployees(staff);
+            });
     }, [refresh]);
 
-    async function openEmployee(id: string) {
-        const employee = users.find(u => u.id === id);
-        if (!employee) return;
-        setAccounts(await getHolidayAccounts(id));
-        setSelectedEmployee(employee);
+    async function openEmployee(user: PublicUser) {
+        setAccounts(await getHolidayAccounts(user.id));
+        setSelected(user);
     }
 
-    async function handleDecision(id: string, approve: boolean) {
+    async function decide(id: string, approve: boolean) {
         try {
-            if (approve) await approveRequest(id);
-            else await rejectRequest(id);
-            setRefresh(prev => prev + 1);
+            await (approve ? approveRequest(id) : rejectRequest(id));
+            setRefresh(n => n + 1);
         } catch (error) {
             alert(error instanceof Error ? error.message : "Could not update request.");
         }
     }
 
-    async function signOut() {
-        await logout();
-        navigate("/login");
-    }
+    const shiftMonth = (d: number) => setMonth(new Date(month.getFullYear(), month.getMonth() + d, 1));
 
-    const cell = { padding: 10, borderBottom: "1px solid #eee", textAlign: "left" as const };
-    const year = month.getFullYear();
-    const monthIndex = month.getMonth();
-    const days = new Date(year, monthIndex + 1, 0).getDate();
-    const dateKey = (day: number) =>
-        `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    const square = {
-        width: 38, height: 38, border: "1px solid #ddd",
-        boxSizing: "border-box" as const
-    };
+    const requestRows = requests.map(r => {
+        const user = users.find(u => u.name === r.employee);
+        return {
+            key: r.id,
+            cells: [
+                <button className="employee-link" onClick={() => user && openEmployee(user)}>{r.employee}</button>,
+                position(user), r.dates, typeLabel(r.type), r.submittedDate,
+                <>
+                    <button onClick={() => decide(r.id, true)}>Approve</button>
+                    <button onClick={() => decide(r.id, false)}>Decline</button>
+                </>
+            ]
+        };
+    });
+
+    const historyRows = history.map(r => ({
+        key: r.id,
+        cells: [
+            r.employee, position(users.find(u => u.id === r.employeeId)),
+            `${r.startDate} – ${r.endDate}`, typeLabel(r.type),
+            r.status === "Rejected" ? "Declined" : r.status
+        ]
+    }));
+
+    const accountRows = accounts.map(a => ({
+        key: a.id,
+        cells: [a.name, `${a.accrued.hours} hours`, `${a.used.hours} hours`,
+            `${a.remaining.hours} hours`, a.eligibleDate || "—"]
+    }));
 
     return (
         <div className="dashboard">
             <div className="header">
                 <p>Accountant</p>
-                <div style={{ display: "flex", gap: 10 }}>
+                <div className="header-actions">
                     <button onClick={() => setShowCalendar(true)}>View Employees Calendar</button>
-                    <button onClick={signOut}>Sign out</button>
+                    <button onClick={() => logout().then(() => navigate("/login"))}>Sign out</button>
                 </div>
             </div>
 
             <div className="section">
                 <h2>Requests</h2>
-                <table className="table">
-                    <thead>
-                    <tr>
-                        <th>Employee</th><th>Position</th><th>Dates</th>
-                        <th>Type</th><th>Submitted</th><th>Actions</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {requests.map(r => {
-                        const employee = users.find(u => u.name === r.employee);
-                        return (
-                            <tr key={r.id}>
-                                <td>
-                                    <button onClick={() => employee && openEmployee(employee.id)}
-                                            style={{ border: "none", background: "none", color: "#1674c4", cursor: "pointer", textDecoration: "underline" }}>
-                                        {r.employee}
-                                    </button>
-                                </td>
-                                <td>{employee?.employmentType || "—"}</td>
-                                <td>{r.dates}</td>
-                                <td>{r.type === "Cancellation" ? "Cancel holiday" : "Request holiday"}</td>
-                                <td>{r.submittedDate}</td>
-                                <td>
-                                    <button onClick={() => handleDecision(r.id, true)}>Approve</button>
-                                    <button onClick={() => handleDecision(r.id, false)}>Decline</button>
-                                </td>
-                            </tr>
-                        );
-                    })}
-                    {!requests.length && <tr><td colSpan={6}>No pending requests.</td></tr>}
-                    </tbody>
-                </table>
+                <Table head={["Employee", "Position", "Dates", "Type", "Submitted", "Actions"]}
+                       rows={requestRows} empty="No pending requests." />
             </div>
 
             <div className="section">
                 <h2>Completed History</h2>
-                <table className="table">
-                    <thead>
-                    <tr>
-                        <th>Employee name</th><th>Position</th><th>Requested days</th>
-                        <th>Type</th><th>Status</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {history.map(r => (
-                        <tr key={r.id}>
-                            <td>{r.employee}</td>
-                            <td>{users.find(u => u.id === r.employeeId)?.employmentType || "—"}</td>
-                            <td>{r.startDate} – {r.endDate}</td>
-                            <td>{r.type === "Cancellation" ? "Cancel holiday" : "Request holiday"}</td>
-                            <td>{r.status === "Rejected" ? "Declined" : r.status}</td>
-                        </tr>
-                    ))}
-                    {!history.length && <tr><td colSpan={5}>No completed requests.</td></tr>}
-                    </tbody>
-                </table>
+                <Table head={["Employee name", "Position", "Requested days", "Type", "Status"]}
+                       rows={historyRows} empty="No completed requests." />
             </div>
 
             {showCalendar && (
-                <div style={overlay}>
-                    <div style={dialog}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <h2>Employees Holiday Calendar</h2>
-                            <button onClick={() => setShowCalendar(false)}>✕</button>
-                        </div>
-
-                        <div style={{ display: "flex", justifyContent: "center", gap: 15, alignItems: "center", marginBottom: 15 }}>
-                            <button onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}>‹</button>
-                            <strong>{month.toLocaleDateString("en", { month: "long", year: "numeric" })}</strong>
-                            <button onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}>›</button>
-                        </div>
-
-                        <div style={{ overflowX: "auto" }}>
-                            <div style={{ display: "grid", gridTemplateColumns: `140px repeat(${days}, 38px)`, width: "max-content" }}>
-                                <div style={{ ...cell, position: "sticky", left: 0, background: "white", zIndex: 2 }}>Employee</div>
-                                {Array.from({ length: days }, (_, i) => (
-                                    <div key={i} style={{ ...square, height: 48, fontSize: 11, display: "grid", placeContent: "center", textAlign: "center" }}>
-                                        {new Date(year, monthIndex, i + 1).toLocaleDateString("en", { weekday: "short" })}
-                                        <strong>{i + 1}</strong>
-                                    </div>
-                                ))}
-
-                                {employees.map(employee => (
-                                    <Fragment key={employee.id}>
-                                        <div style={{ ...cell, position: "sticky", left: 0, background: "white", zIndex: 1 }}>
-                                            {employee.name}
-                                        </div>
-                                        {Array.from({ length: days }, (_, i) => {
-                                            const date = dateKey(i + 1);
-                                            const holiday = approved.some(r =>
-                                                r.employeeId === employee.id &&
-                                                (r.type ?? "Holiday") === "Holiday" &&
-                                                r.startDate <= date && r.endDate >= date
-                                            );
-                                            return <div key={date} style={{ ...square, background: holiday ? "#bde8c5" : "white" }} />;
-                                        })}
-                                    </Fragment>
-                                ))}
-                            </div>
-                        </div>
-                        <div style={{ textAlign: "right", marginTop: 20 }}>
-                            
-                        </div>
+                <Dialog title="Employees Holiday Calendar" onClose={() => setShowCalendar(false)}>
+                    <div className="calendar-controls">
+                        <button onClick={() => shiftMonth(-1)}>‹</button>
+                        <strong>{month.toLocaleDateString("en", { month: "long", year: "numeric" })}</strong>
+                        <button onClick={() => shiftMonth(1)}>›</button>
                     </div>
-                </div>
+                    <HolidayCalendar month={month} employees={employees} approved={approved} />
+                </Dialog>
             )}
 
-            {selectedEmployee && (
-                <div style={overlay}>
-                    <div style={{ ...dialog, maxWidth: 850 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <h2>{selectedEmployee.name}'s Holiday Balance Overview</h2>
-                            <button onClick={() => setSelectedEmployee(null)}>✕</button>
-                        </div>
-                        <div style={{ overflowX: "auto" }}>
-                            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                                <thead>
-                                <tr>
-                                    {["Holiday account", "Accrued holiday", "Used holiday", "Total holiday left", "Eligible date"].map(x =>
-                                        <th key={x} style={cell}>{x}</th>
-                                    )}
-                                </tr>
-                                </thead>
-                                <tbody>
-                                {accounts.map(a => (
-                                    <tr key={a.id}>
-                                        <td style={cell}>{a.name}</td>
-                                        <td style={cell}>{a.accrued.hours} hours</td>
-                                        <td style={cell}>{a.used.hours} hours</td>
-                                        <td style={cell}>{a.remaining.hours} hours</td>
-                                        <td style={cell}>{a.eligibleDate || "—"}</td>
-                                    </tr>
-                                ))}
-                                {!accounts.length && <tr><td colSpan={5} style={cell}>No holiday accounts found.</td></tr>}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div style={{ textAlign: "right", marginTop: 20 }}>
-                            
-                        </div>
+            {selected && (
+                <Dialog title={`${selected.name}'s Holiday Balance Overview`}
+                        onClose={() => setSelected(null)} className="balance-dialog">
+                    <div className="calendar-scroll">
+                        <Table tableClass="accountant-table" cellClass="accountant-cell" rows={accountRows}
+                               head={["Holiday account", "Accrued holiday", "Used holiday", "Total holiday left", "Eligible date"]}
+                               empty="No holiday accounts found." />
                     </div>
-                </div>
+                </Dialog>
             )}
         </div>
     );
 }
-
-const overlay = {
-    position: "fixed" as const, inset: 0, background: "rgba(0,0,0,0.5)",
-    display: "flex", justifyContent: "center", alignItems: "center",
-    zIndex: 1000, padding: 20
-};
-
-const dialog = {
-    background: "white", padding: 24, borderRadius: 8,
-    width: "100%", maxWidth: 1100, maxHeight: "80vh",
-    overflowY: "auto" as const
-};
 
 export default Accountant;
