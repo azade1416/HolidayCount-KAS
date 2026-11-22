@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { login } from "../mockApi";
 
@@ -6,10 +6,10 @@ function Login() {
     const [form, setForm] = useState({ email: "", password: "" });
     const navigate = useNavigate();
 
-    const handleChange = (e) =>
+    const handleChange = (e: ChangeEvent<HTMLInputElement>) =>
         setForm({ ...form, [e.target.name]: e.target.value });
 
-    const handleLogin = async (e) => {
+    const handleLogin = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         try {
             const user = await login(form.email, form.password);
