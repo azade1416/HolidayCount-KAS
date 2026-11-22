@@ -5,7 +5,7 @@ import type { AccountantRequest } from "./accountant";
 const API_URL = import.meta.env.VITE_API_URL ?? "/api";
 const TOKEN_KEY = "holidaycount_token";
 
-type ApiUser = { id: string; name: string; email: string; role: string; employmentType?: string | null };
+type ApiUser = { id: string; name?: string; fullName?: string; email: string; role: string; employmentType?: string | null };
 type ApiRequest = {
     id: string; userId: string; accountType: number | string; requestType: number | string;
     originalRequestId?: string | null; startDate: string; endDate: string;
@@ -42,7 +42,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 const toPublicUser = (user: ApiUser): PublicUser => ({
-    id: user.id, name: user.name, email: user.email,
+    id: user.id, name: user.name ?? user.fullName ?? "", email: user.email,
     role: roleName(user.role), employmentType: user.employmentType ?? undefined
 });
 
@@ -90,8 +90,16 @@ export async function login(email: string, password: string): Promise<PublicUser
 
 export async function getCurrentUser(): Promise<PublicUser | null> {
     if (!localStorage.getItem(TOKEN_KEY)) return null;
-    try { return toPublicUser(await request<ApiUser>("/auth/me")); }
+    let user: PublicUser;
+    try {
+        user = toPublicUser(await request<ApiUser>("/auth/me"));
+    }
     catch { localStorage.removeItem(TOKEN_KEY); return null; }
+    if (user.role === "Employee") {
+        try { user.weeklySchedule = await getEmployeeSchedule(user.id); }
+        catch { /* Keep the authenticated user if schedule loading temporarily fails. */ }
+    }
+    return user;
 }
 
 export async function logout(): Promise<void> {
