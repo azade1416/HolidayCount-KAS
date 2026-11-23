@@ -4,7 +4,7 @@ import {
     getRequests, getRequestHistory, getUsers, getHolidayAccounts,
     getApprovedHolidayRequests, getEmployees,
     approveRequest, rejectRequest, logout
-} from "../api";
+} from "../holidayApi";
 import type { AccountantRequest } from "../accountant";
 import type { MockRequest, MockHolidayAccount, Employee } from "../employee";
 import type { PublicUser } from "../admin";

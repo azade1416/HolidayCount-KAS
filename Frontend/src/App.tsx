@@ -1,7 +1,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { getCurrentUser } from "./api";
+import { getCurrentUser } from "./holidayApi";
 import Login from "./pages/Login";
 import Accountant from "./pages/Accountant";
 import Employee from "./pages/Employee";

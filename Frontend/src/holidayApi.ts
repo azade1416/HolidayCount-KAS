@@ -2,7 +2,8 @@ import type { Employee, WeeklySchedule, ScheduleChange, MockHolidayAccount, Mock
 import type { SystemRole, PublicUser, CreateEmployeeData, Announcement } from "./admin";
 import type { AccountantRequest } from "./accountant";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "/api";
+import { Api, type CreateUserDto } from "./generated/client";
+
 const TOKEN_KEY = "holidaycount_token";
 
 type ApiUser = { id: string; name?: string; fullName?: string; email: string; role: string; employmentType?: string | null };
@@ -23,22 +24,25 @@ function enumName(value: number | string, names: string[]): string {
     return names.find(name => name.toLowerCase() === normalized) ?? names[0];
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const token = localStorage.getItem(TOKEN_KEY);
-    const response = await fetch(`${API_URL}${path}`, {
-        ...options,
-        headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            ...options.headers
-        }
-    });
-    if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        throw new Error(body?.message ?? body?.title ?? `Request failed (${response.status}).`);
+const { api } = new Api({
+    baseUrl: (import.meta.env.VITE_API_URL ?? "/api").replace(/\/?api\/?$/, "").replace(/\/$/, ""),
+    securityWorker: () => {
+        const token = localStorage.getItem(TOKEN_KEY);
+        return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
     }
-    if (response.status === 204) return undefined as T;
-    return response.json() as Promise<T>;
+});
+
+async function responseData<T>(request: Promise<Response>, parseJson = true): Promise<T> {
+    try {
+        const response = await request;
+        if (parseJson) return await response.json() as T;
+        return undefined as T;
+    } catch (error) {
+        if (!(error instanceof Response)) throw error;
+        const body = await error.json().catch(() => null);
+        if (error.status === 401) throw new Error("Request failed (401).");
+        throw new Error(body?.message ?? body?.title ?? `Request failed (${error.status}).`);
+    }
 }
 
 const toPublicUser = (user: ApiUser): PublicUser => ({
@@ -60,7 +64,7 @@ function toMockRequest(value: ApiRequest, userName = "Employee"): MockRequest {
 }
 
 async function usersById(): Promise<Map<string, string>> {
-    const employees = await request<Employee[]>("/employees");
+    const employees = await getEmployees();
     return new Map(employees.map(employee => [employee.id, employee.name]));
 }
 
@@ -75,10 +79,9 @@ export function createDefaultSchedule(): WeeklySchedule {
 
 export async function login(email: string, password: string): Promise<PublicUser | null> {
     try {
-        const result = await request<{ token: string; id?: string; name: string; email: string; role: string; employmentType?: string }>(
-            "/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }
+        const result = await responseData<{ token: string; id?: string; name: string; email: string; role: string; employmentType?: string }>(
+            api.authLoginCreate({ email, password })
         );
-        // The login token is returned by the backend, so store it for subsequent requests.
         localStorage.setItem(TOKEN_KEY, result.token);
         const user = await getCurrentUser();
         return user ?? { id: result.id ?? "", name: result.name, email: result.email, role: roleName(result.role), employmentType: result.employmentType };
@@ -92,7 +95,7 @@ export async function getCurrentUser(): Promise<PublicUser | null> {
     if (!localStorage.getItem(TOKEN_KEY)) return null;
     let user: PublicUser;
     try {
-        user = toPublicUser(await request<ApiUser>("/auth/me"));
+        user = toPublicUser(await responseData<ApiUser>(api.authMeList()));
     }
     catch { localStorage.removeItem(TOKEN_KEY); return null; }
     if (user.role === "Employee") {
@@ -103,12 +106,12 @@ export async function getCurrentUser(): Promise<PublicUser | null> {
 }
 
 export async function logout(): Promise<void> {
-    try { if (localStorage.getItem(TOKEN_KEY)) await request<void>("/auth/logout", { method: "POST" }); }
+    try { if (localStorage.getItem(TOKEN_KEY)) await responseData<void>(api.authLogoutCreate(), false); }
     finally { localStorage.removeItem(TOKEN_KEY); }
 }
 
 export async function getUsers(): Promise<PublicUser[]> {
-    const users = await request<ApiUser[]>("/auth/users");
+    const users = await responseData<ApiUser[]>(api.authUsersList());
     return Promise.all(users.map(async user => {
         const result = toPublicUser(user);
         if (result.role === "Employee") result.weeklySchedule = await getEmployeeSchedule(result.id);
@@ -116,52 +119,42 @@ export async function getUsers(): Promise<PublicUser[]> {
     }));
 }
 
-function toWorkSchedule(schedule?: WeeklySchedule) {
-    if (!schedule) return {};
-    return Object.fromEntries(Object.entries(schedule).map(([day, hours]) => [day, hours]));
-}
-
-function rolePayload(employmentType: string) {
+function rolePayload(employmentType: string): Pick<CreateUserDto, "role" | "employmentType"> {
     if (employmentType === "Accountant") return { role: "accountant" };
     if (employmentType === "Admin") return { role: "admin" };
     return { role: "employee", employmentType: employmentType === "Part-time employee" ? 1 : 0 };
 }
 
 export async function createEmployee(data: CreateEmployeeData): Promise<void> {
-    await request<void>("/auth/users", { method: "POST", body: JSON.stringify({
+    await responseData<void>(api.authUsersCreate({
         fullName: data.name, email: data.email, password: data.password,
-        ...rolePayload(data.employmentType), workSchedule: toWorkSchedule(data.weeklySchedule)
-    }) });
+        ...rolePayload(data.employmentType), workSchedule: data.weeklySchedule ?? {}
+    }), false);
 }
 
-export async function updateUser(id: string, updates: Partial<Pick<PublicUser, "name" | "email" | "role" | "employmentType" | "weeklySchedule">> & { password?: string }): Promise<PublicUser> {
-    await request<void>(`/auth/users/${id}`, { method: "PUT", body: JSON.stringify({
+export async function updateUser(id: string, updates: Partial<Pick<PublicUser, "name" | "email" | "role" | "employmentType" | "weeklySchedule">> & { password?: string }): Promise<void> {
+    await responseData<void>(api.authUsersUpdate(id, {
         name: updates.name, email: updates.email, password: updates.password,
         ...(updates.employmentType ? rolePayload(updates.employmentType) : updates.role ? { role: updates.role.toLowerCase() } : {}),
-        workSchedule: updates.weeklySchedule ? toWorkSchedule(updates.weeklySchedule) : undefined
-    }) });
-    return { id, name: updates.name ?? "", email: updates.email ?? "", role: updates.role ?? "Employee", employmentType: updates.employmentType, weeklySchedule: updates.weeklySchedule };
+        workSchedule: updates.weeklySchedule
+    }), false);
 }
 
 export async function deleteUser(id: string): Promise<void> {
-    await request<void>(`/auth/users/${id}`, { method: "DELETE" });
+    await responseData<void>(api.authUsersDelete(id), false);
 }
 
 export async function getEmployees(): Promise<Employee[]> {
-    return request<Employee[]>("/employees");
-}
-
-export async function getEmployeeById(id: string): Promise<Employee | undefined> {
-    return (await getEmployees()).find(employee => employee.id === id);
+    return responseData<Employee[]>(api.employeesList());
 }
 
 export async function getEmployeeSchedule(id: string): Promise<WeeklySchedule | undefined> {
-    const data = await request<Record<string, { from: string; to: string }>>(`/employees/${id}/schedule`);
+    const data = await responseData<Record<string, { from: string; to: string }>>(api.employeesScheduleList(id));
     return Object.fromEntries(WORKDAYS.map(day => [day, data[day] ?? { from: "", to: "" }])) as WeeklySchedule;
 }
 
 export async function getScheduleHistory(id: string): Promise<ScheduleChange[]> {
-    const changes = await request<Array<{ id: string; effectiveFrom: string; newScheduleJson: string }>>(`/employees/${id}/schedule-history`);
+    const changes = await responseData<Array<{ id: string; effectiveFrom: string; newScheduleJson: string }>>(api.employeesScheduleHistoryList(id));
     return changes.map(change => ({
         id: change.id, date: change.effectiveFrom,
         previousSchedule: createDefaultSchedule(),
@@ -170,38 +163,30 @@ export async function getScheduleHistory(id: string): Promise<ScheduleChange[]> 
 }
 
 export async function getHolidayAccounts(employeeId: string): Promise<MockHolidayAccount[]> {
-    return request<MockHolidayAccount[]>(`/employees/${employeeId}/holiday-accounts`);
+    return responseData<MockHolidayAccount[]>(api.employeesHolidayAccountsList(employeeId));
 }
 
-export async function createHolidayRequest(input: { employeeId: string; employee: string; account: string; startDate: string; endDate: string }): Promise<MockRequest> {
-    const accounts = await getHolidayAccounts(input.employeeId);
-    const account = accounts.find(item => item.name === input.account);
-    if (!account) throw new Error("Holiday account not found.");
-    const result = await request<ApiRequest>("/leave-requests", { method: "POST", body: JSON.stringify({
-        accountId: account.id, startDate: input.startDate, endDate: input.endDate,
-        requestedDays: 1, requestedHours: 0
-    }) });
-    return toMockRequest(result, input.employee);
+export async function createHolidayRequest(accountId: string, startDate: string, endDate: string): Promise<void> {
+    await responseData<void>(api.leaveRequestsCreate({ accountId, startDate, endDate, requestedDays: 1, requestedHours: 0 }), false);
 }
 
-export async function createCancellationRequest(_employeeId: string, employee: string, originalRequestId: string): Promise<MockRequest> {
-    const result = await request<ApiRequest>(`/leave-requests/${originalRequestId}/cancel`, { method: "POST" });
-    return toMockRequest(result, employee);
+export async function createCancellationRequest(originalRequestId: string): Promise<void> {
+    await responseData<void>(api.leaveRequestsCancelCreate(originalRequestId), false);
 }
 
-export async function getEmployeeRequestHistory(_employeeId: string): Promise<MockRequest[]> {
-    const requests = await request<ApiRequest[]>("/leave-requests");
+export async function getEmployeeRequestHistory(): Promise<MockRequest[]> {
+    const requests = await responseData<ApiRequest[]>(api.leaveRequestsList());
     return requests.map(item => toMockRequest(item));
 }
 
 export async function getApprovedHolidayRequests(): Promise<MockRequest[]> {
-    const requests = await request<ApiRequest[]>("/leave-requests/approved-holidays");
+    const requests = await responseData<ApiRequest[]>(api.leaveRequestsApprovedHolidaysList());
     const names = await usersById();
     return requests.map(item => toMockRequest(item, names.get(item.userId) ?? "Employee"));
 }
 
 export async function getRequests(): Promise<AccountantRequest[]> {
-    const [requests, names] = await Promise.all([request<ApiRequest[]>("/leave-requests/pending"), usersById()]);
+    const [requests, names] = await Promise.all([responseData<ApiRequest[]>(api.leaveRequestsPendingList()), usersById()]);
     return requests.map(item => ({
         id: item.id, employee: names.get(item.userId) ?? "Employee",
         dates: `${item.startDate} – ${item.endDate}`,
@@ -212,22 +197,22 @@ export async function getRequests(): Promise<AccountantRequest[]> {
 }
 
 export async function getRequestHistory(): Promise<MockRequest[]> {
-    const [requests, names] = await Promise.all([request<ApiRequest[]>("/leave-requests/history"), usersById()]);
+    const [requests, names] = await Promise.all([responseData<ApiRequest[]>(api.leaveRequestsHistoryList()), usersById()]);
     return requests.map(item => toMockRequest(item, names.get(item.userId) ?? "Employee"));
 }
 
-export async function approveRequest(id: string): Promise<MockRequest> {
-    return toMockRequest(await request<ApiRequest>(`/leave-requests/${id}/approve`, { method: "POST" }));
+export async function approveRequest(id: string): Promise<void> {
+    await responseData<void>(api.leaveRequestsApproveCreate(id), false);
 }
 
-export async function rejectRequest(id: string): Promise<MockRequest> {
-    return toMockRequest(await request<ApiRequest>(`/leave-requests/${id}/reject`, { method: "POST", body: "{}" }));
+export async function rejectRequest(id: string): Promise<void> {
+    await responseData<void>(api.leaveRequestsRejectCreate(id, {}), false);
 }
 
 export async function sendAnnouncement(message: string): Promise<void> {
-    await request<void>("/announcements", { method: "POST", body: JSON.stringify({ message }) });
+    await responseData<void>(api.announcementsCreate({ message }), false);
 }
 
 export async function getAnnouncements(): Promise<Announcement[]> {
-    return request<Announcement[]>("/announcements");
+    return responseData<Announcement[]>(api.announcementsList());
 }

@@ -4,7 +4,7 @@ import {
     getCurrentUser, getHolidayAccounts, getEmployeeRequestHistory,
     getApprovedHolidayRequests, getEmployees, createHolidayRequest,
     createCancellationRequest, logout, CALENDAR_WEEKDAYS
-} from "../api";
+} from "../holidayApi";
 import type { PublicUser } from "../admin";
 import type { MockHolidayAccount, MockRequest, WeeklySchedule, Employee as EmployeeType } from "../employee";
 import HolidayCalendar from "./HolidayCalendar";
@@ -54,7 +54,7 @@ function Employee() {
         setUser(current);
         const [a, h, all, staff] = await Promise.all([
             getHolidayAccounts(current.id),
-            getEmployeeRequestHistory(current.id),
+            getEmployeeRequestHistory(),
             getApprovedHolidayRequests(),
             getEmployees()
         ]);
@@ -90,9 +90,7 @@ function Employee() {
             return setBookingError("Please select an account and valid dates.");
         }
         return submit(
-            () => createHolidayRequest({
-                employeeId: user.id, employee: user.name, account: account.name, startDate, endDate
-            }),
+            () => createHolidayRequest(account.id, startDate, endDate),
             setBookingError, { startDate: "", endDate: "" }, "Could not submit holiday request."
         );
     }
@@ -102,7 +100,7 @@ function Employee() {
             return setCancellationError("Please select an approved holiday to cancel.");
         }
         return submit(
-            () => createCancellationRequest(user.id, user.name, cancellationId),
+            () => createCancellationRequest(cancellationId),
             setCancellationError, { cancellationId: "" }, "Could not submit cancellation request."
         );
     }
