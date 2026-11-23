@@ -31,6 +31,12 @@ services:
       - Jwt__Key=${JWT_KEY}
       - Jwt__Issuer=Backend
       - Jwt__Audience=Frontend
+      - Seed__Admin__Email=${SEED_ADMIN_EMAIL}
+      - Seed__Admin__Password=${SEED_ADMIN_PASSWORD}
+      - Seed__Accountant__Email=${SEED_ACCOUNTANT_EMAIL}
+      - Seed__Accountant__Password=${SEED_ACCOUNTANT_PASSWORD}
+      - Seed__Employee__Email=${SEED_EMPLOYEE_EMAIL}
+      - Seed__Employee__Password=${SEED_EMPLOYEE_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
