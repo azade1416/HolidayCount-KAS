@@ -80,6 +80,13 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.EnsureSchemaAsync();
+    await db.SeedUsersAsync(
+        builder.Configuration["Seed:Admin:Email"] ?? "",
+        builder.Configuration["Seed:Admin:Password"] ?? "",
+        builder.Configuration["Seed:Accountant:Email"] ?? "",
+        builder.Configuration["Seed:Accountant:Password"] ?? "",
+        builder.Configuration["Seed:Employee:Email"] ?? "",
+        builder.Configuration["Seed:Employee:Password"] ?? "");
 }
 
 

@@ -38,6 +38,19 @@ The API will enforce these permissions and check ownership for employee records.
 
 ## Deployment
 
+- A clean database is seeded with three demo accounts. Configure credentials in `.env`; never commit passwords:
+
+```env
+SEED_ADMIN_EMAIL=admin@businessesbjerg.com
+SEED_ADMIN_PASSWORD=<password>
+SEED_ACCOUNTANT_EMAIL=accountant@businessesbjerg.com
+SEED_ACCOUNTANT_PASSWORD=<password>
+SEED_EMPLOYEE_EMAIL=employee@businessesbjerg.com
+SEED_EMPLOYEE_PASSWORD=<password>
+```
+
+The seed runs only when the `Users` table is empty.
+
 - Client URL pending.
 - API Swagger URL pending.
 - The client and API will deploy independently. The API will use a central relational database hosted in the cloud.

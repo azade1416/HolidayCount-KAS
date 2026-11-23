@@ -1,5 +1,6 @@
 using Backend.Models;
 using LinqToDB;
+using LinqToDB.Async;
 using LinqToDB.Data;
 
 namespace Backend.Data;
@@ -167,5 +168,92 @@ public class AppDbContext : DataConnection
             ""EffectiveFrom"" date NOT NULL, ""PreviousScheduleJson"" text NULL, ""NewScheduleJson"" text NOT NULL,
             ""CreatedAtUtc"" timestamp with time zone NOT NULL,
             ""CreatedByUserId"" uuid NULL REFERENCES ""Users""(""Id"") ON DELETE SET NULL);");
+    }
+
+    public async Task SeedUsersAsync(
+        string adminEmail,
+        string adminPassword,
+        string accountantEmail,
+        string accountantPassword,
+        string employeeEmail,
+        string employeePassword)
+    {
+        var seedValues = new[]
+        {
+            adminEmail, adminPassword, accountantEmail,
+            accountantPassword, employeeEmail, employeePassword
+        };
+        if (seedValues.All(string.IsNullOrWhiteSpace))
+            return;
+        if (seedValues.Any(string.IsNullOrWhiteSpace))
+            throw new InvalidOperationException("All seed email and password settings must be configured.");
+
+        if (await this.Users.AnyAsync(x => true))
+            return;
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var users = new[]
+        {
+            CreateSeedUser("Admin", adminEmail, adminPassword, "admin", null),
+            CreateSeedUser("Accountant", accountantEmail, accountantPassword, "accountant", null),
+            CreateSeedUser("Employee", employeeEmail, employeePassword, "employee", EmploymentType.FullTime)
+        };
+
+        foreach (var user in users)
+            await this.InsertAsync(user);
+
+        var employee = users[2];
+        foreach (var day in new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday })
+        {
+            await this.InsertAsync(new WorkScheduleEntry
+            {
+                Id = Guid.NewGuid(),
+                UserId = employee.Id,
+                DayOfWeek = day,
+                StartTime = new TimeOnly(8, 0),
+                EndTime = new TimeOnly(16, 0),
+                EffectiveFrom = today
+            });
+        }
+
+        foreach (var accountType in new[] { HolidayAccountType.Weeks1To5, HolidayAccountType.Week6 })
+        {
+            await this.InsertAsync(new HolidayBalance
+            {
+                Id = Guid.NewGuid(),
+                UserId = employee.Id,
+                AccountType = accountType,
+                EarningYear = today.Year,
+                EarningPeriodStart = new DateOnly(today.Year, 9, 1),
+                EarningPeriodEnd = new DateOnly(today.Year + 1, 8, 31),
+                UsagePeriodStart = new DateOnly(today.Year, 9, 1),
+                UsagePeriodEnd = new DateOnly(today.Year + 1, 8, 31)
+            });
+        }
+    }
+
+    private static User CreateSeedUser(
+        string fullName,
+        string email,
+        string password,
+        string role,
+        EmploymentType? employmentType)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            throw new InvalidOperationException($"Seed email for role '{role}' is not configured.");
+        if (string.IsNullOrWhiteSpace(password))
+            throw new InvalidOperationException($"Seed password for role '{role}' is not configured.");
+
+        return new User
+        {
+            Id = Guid.NewGuid(),
+            FullName = fullName,
+            Email = email.Trim(),
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            Role = role,
+            EmploymentType = employmentType ?? EmploymentType.FullTime,
+            EmploymentStartDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            IsActive = true
+        };
     }
 }
