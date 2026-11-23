@@ -1,6 +1,8 @@
+using System.Buffers.Text;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using Xunit;
 
@@ -78,5 +80,34 @@ public class AuthorizationTests : IClassFixture<ApiFactory>
 
         // Assert: same answer as a request that does not exist
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Token_with_changed_role_returns_401()
+    {
+        // Arrange: a real employee token
+        var token = await _factory.TokenForNewUser("employee");
+
+        // A JWT has three parts separated by dots: header.payload.signature
+        var parts = token.Split('.');
+
+        // The payload is only encoded, not encrypted, so anyone can read it
+        var payload = Encoding.UTF8.GetString(Base64Url.DecodeFromChars(parts[1]));
+
+        // The attacker changes the role from employee to admin
+        var fakePayload = payload.Replace("\"employee\"", "\"admin\"");
+
+        // Make sure the role was really changed, otherwise the test proves nothing
+        Assert.NotEqual(payload, fakePayload);
+
+        // The signature stays the old one: without the secret key it cannot be recalculated
+        var fakeToken = $"{parts[0]}.{Base64Url.EncodeToString(Encoding.UTF8.GetBytes(fakePayload))}.{parts[2]}";
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", fakeToken);
+
+        // Act: call an endpoint that only admin and accountant can use
+        var response = await _client.GetAsync("/api/auth/users");
+
+        // Assert: the signature no longer matches the payload, so the token is rejected
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 }
