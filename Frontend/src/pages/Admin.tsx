@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-    getUsers, getCurrentUser, deleteUser,
+    getUsers, getCurrentUser, deleteUser, logout,
     sendAnnouncement, getAnnouncements, getScheduleHistory, WORKDAYS
-} from "../mockApi";
+} from "../holidayApi";
 import type { PublicUser, Announcement } from "../admin";
 import type { ScheduleChange, WeeklySchedule } from "../employee";
 import CreateEmployee from "./CreateEmployee";
@@ -58,7 +58,7 @@ function Admin() {
                 <h1>Admin</h1>
                 <div>
                     <button className="admin-button" onClick={() => setEditing("new")}>Create Employee Account</button>
-                    <button className="admin-button" onClick={() => navigate("/login")}>Sign out</button>
+                    <button className="admin-button" onClick={async () => { await logout(); navigate("/login"); }}>Sign out</button>
                 </div>
             </div>
 

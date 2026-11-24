@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
     createEmployee, updateUser, createDefaultSchedule, WORKDAYS, EMPLOYMENT_TYPES,
     DEFAULT_EMPLOYMENT_TYPE,
-} from "../mockApi";
+} from "../holidayApi";
 import type { WeeklySchedule } from "../employee";
 import type { PublicUser } from "../admin";
 
