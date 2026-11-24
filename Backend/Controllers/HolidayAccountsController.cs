@@ -32,6 +32,7 @@ public class HolidayAccountsController : ControllerBase
         if (current.Role == "employee" && current.Id != employeeId)
             return NotFound();
 
+        await _holidays.EnsureAccrualsAsync(employeeId, DateOnly.FromDateTime(DateTime.UtcNow));
         var accounts = await _db.HolidayBalances.Where(x => x.UserId == employeeId).ToListAsync();
         return Ok(accounts.Select(x => new
         {
@@ -93,24 +94,38 @@ public class HolidayAccountsController : ControllerBase
         if (date < DateOnly.FromDateTime(DateTime.UtcNow))
             return BadRequest(new { message = "Date must be today or in the future." });
 
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        await _holidays.EnsureAccrualsAsync(current.Id, today);
         var accounts = await _db.HolidayBalances.Where(x => x.UserId == current.Id).ToListAsync();
         var approved = await _db.LeaveRequests.Where(x =>
             x.UserId == current.Id
             && x.Status == LeaveRequestStatus.Approved
-            && x.RequestType == LeaveRequestType.Holiday
-            && x.StartDate <= date).ToListAsync();
+            && x.RequestType == LeaveRequestType.Holiday).ToListAsync();
 
-        return Ok(accounts.Select(x =>
+        var result = new List<object>();
+        foreach (var account in accounts)
         {
-            var futureUsed = approved
-                .Where(r => r.AccountType == x.AccountType && r.StartDate >= DateOnly.FromDateTime(DateTime.UtcNow))
-                .Sum(r => r.RequestedHours);
-            return new
+            var projectedEarned = await _holidays.ProjectAccruedHoursAsync(current.Id, account, date);
+            decimal usedByDate = 0;
+            foreach (var request in approved.Where(x => x.AccountType == account.AccountType
+                && x.StartDate <= date && x.EndDate >= account.UsagePeriodStart))
             {
-                x.Id,
-                name = x.AccountType == HolidayAccountType.Weeks1To5 ? "Weeks 1–5" : "Week 6",
-                remainingHours = Math.Round(x.EarnedHours - x.UsedHours - futureUsed - x.TransferredHours, 2)
-            };
-        }));
+                var start = request.StartDate < account.UsagePeriodStart ? account.UsagePeriodStart : request.StartDate;
+                var end = request.EndDate > date ? date : request.EndDate;
+                if (end > account.UsagePeriodEnd) end = account.UsagePeriodEnd;
+                if (start <= end)
+                    usedByDate += await _holidays.CalculateHoursAsync(current.Id, start, end);
+            }
+
+            result.Add(new
+            {
+                account.Id,
+                name = account.AccountType == HolidayAccountType.Weeks1To5 ? "Weeks 1–5" : "Week 6",
+                accruedHours = Math.Round(projectedEarned, 2),
+                usedHours = Math.Round(usedByDate, 2),
+                remainingHours = Math.Round(projectedEarned - usedByDate - account.TransferredHours, 2)
+            });
+        }
+        return Ok(result);
     }
 }

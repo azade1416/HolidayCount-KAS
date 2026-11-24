@@ -1,4 +1,5 @@
 using Backend.Models;
+using Backend.DTOs;
 using LinqToDB;
 using LinqToDB.Async;
 using LinqToDB.Data;
@@ -114,9 +115,13 @@ public class AppDbContext : DataConnection
         await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""MonthlyAccruals"" (
             ""Id"" uuid PRIMARY KEY, ""HolidayBalanceId"" uuid NOT NULL REFERENCES ""HolidayBalances""(""Id"") ON DELETE CASCADE,
             ""AccrualMonth"" date NOT NULL, ""EarnedHours"" numeric(10,2) NOT NULL,
+            ""AccrualRatePerMonth"" numeric(8,4) NOT NULL DEFAULT 0,
+            ""AverageDayHours"" numeric(8,2) NOT NULL DEFAULT 0,
             ""CreatedAtUtc"" timestamp with time zone NOT NULL,
             UNIQUE (""HolidayBalanceId"", ""AccrualMonth""));");
         await this.ExecuteAsync(@"ALTER TABLE ""MonthlyAccruals"" ADD COLUMN IF NOT EXISTS ""EarnedHours"" numeric(10,2) NOT NULL DEFAULT 0;");
+        await this.ExecuteAsync(@"ALTER TABLE ""MonthlyAccruals"" ADD COLUMN IF NOT EXISTS ""AccrualRatePerMonth"" numeric(8,4) NOT NULL DEFAULT 0;");
+        await this.ExecuteAsync(@"ALTER TABLE ""MonthlyAccruals"" ADD COLUMN IF NOT EXISTS ""AverageDayHours"" numeric(8,2) NOT NULL DEFAULT 0;");
         await this.ExecuteAsync(@"
             DO $$
             BEGIN
@@ -159,10 +164,13 @@ public class AppDbContext : DataConnection
 
         await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""RulePresets"" (
             ""Id"" uuid PRIMARY KEY, ""Code"" varchar(100) NOT NULL UNIQUE, ""Name"" varchar(200) NOT NULL,
+            ""SettingsJson"" text NOT NULL DEFAULT '{}',
             ""AccrualRatePerMonth"" numeric(8,4) NOT NULL, ""Weeks1To5Enabled"" boolean NOT NULL,
             ""Week6Enabled"" boolean NOT NULL, ""EffectiveFrom"" date NOT NULL, ""EffectiveTo"" date NULL,
             ""IsActive"" boolean NOT NULL, ""CreatedAtUtc"" timestamp with time zone NOT NULL,
             ""CreatedByUserId"" uuid NULL REFERENCES ""Users""(""Id"") ON DELETE SET NULL);");
+        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" ADD COLUMN IF NOT EXISTS ""SettingsJson"" text NOT NULL DEFAULT '{}';");
+        await this.ExecuteAsync(@"CREATE UNIQUE INDEX IF NOT EXISTS ""UX_RulePresets_Name_CI"" ON ""RulePresets"" (LOWER(""Name""));");
         await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""ScheduleChanges"" (
             ""Id"" uuid PRIMARY KEY, ""UserId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
             ""EffectiveFrom"" date NOT NULL, ""PreviousScheduleJson"" text NULL, ""NewScheduleJson"" text NOT NULL,
@@ -228,6 +236,34 @@ public class AppDbContext : DataConnection
                 EarningPeriodEnd = new DateOnly(today.Year + 1, 8, 31),
                 UsagePeriodStart = new DateOnly(today.Year, 9, 1),
                 UsagePeriodEnd = new DateOnly(today.Year + 1, 8, 31)
+            });
+        }
+    }
+
+    public async Task EnsureDefaultRuleSettingsAsync()
+    {
+        var defaults = new (string Key, decimal? NumericValue, bool? BooleanValue, string Description)[]
+        {
+            (HolidayRuleSettingKeys.Weeks1To5DaysPerMonth, 2.08m, null, "Holiday days earned per month for weeks 1–5."),
+            (HolidayRuleSettingKeys.Week6DaysPerMonth, 0.42m, null, "Holiday days earned per month for week 6."),
+            (HolidayRuleSettingKeys.MainHolidayNoticeMonths, 3m, null, "Notice period for the main holiday."),
+            (HolidayRuleSettingKeys.OtherHolidayNoticeMonths, 1m, null, "Notice period for other holidays."),
+            (HolidayRuleSettingKeys.TransfersEnabled, null, true, "Whether unused holiday may be transferred.")
+        };
+
+        foreach (var setting in defaults)
+        {
+            if (await this.SystemParameters.AnyAsync(x => x.Key == setting.Key))
+                continue;
+
+            await this.InsertAsync(new SystemParameter
+            {
+                Id = Guid.NewGuid(),
+                Key = setting.Key,
+                NumericValue = setting.NumericValue,
+                BooleanValue = setting.BooleanValue,
+                EffectiveFrom = HolidayRuleSettingKeys.DefaultsEffectiveFrom,
+                Description = setting.Description
             });
         }
     }

@@ -233,10 +233,11 @@ any employee.
 Balances use server-calculated hours with two decimals. Money fields must not
 be stored or returned by this system.
 
-### `GET /holiday-accounts/future-balance?date=YYYY-MM-DD` — **Planned**
+### `GET /holiday-accounts/future-balance?date=YYYY-MM-DD`
 
-Returns an employee's calculated balances on the future date. Until
-implemented, the frontend button remains disabled.
+Returns the current user's projected balance for each account, including
+monthly accrual through the requested date. Only approved leave reduces the
+projected balance; pending requests do not.
 
 ## Leave and cancellation requests
 
@@ -441,21 +442,71 @@ Public holidays can be created and edited only by `admin`.
 }
 ```
 
-## Planned rule configuration
+## Rule presets and system parameters
 
-The assignment's presets/rule administration are not required for the current
-mock frontend.
+These endpoints require `admin`. Presets are reusable named settings. Saving
+rules creates an immutable effective-dated version; it does not rewrite
+existing monthly accrual records.
 
-- `GET /rule-presets`
-- `GET /rule-presets/{id}`
-- `POST /rule-sets`
-- `GET /rule-sets`
-- `GET /rule-sets/{id}`
-- `PUT /rule-sets/{id}`
-- `POST /rule-sets/{id}/activate`
+### `GET /rule-presets`
 
-Rule changes must be effective-dated and must not rewrite historical
-calculations.
+Returns saved presets:
+
+```json
+[
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "name": "Business Esbjerg defaults",
+    "settings": {
+      "weeks1To5DaysPerMonth": 2.08,
+      "week6DaysPerMonth": 0.42,
+      "mainHolidayNoticeMonths": 3,
+      "otherHolidayNoticeMonths": 1,
+      "transfersEnabled": true
+    }
+  }
+]
+```
+
+### `GET /rule-presets/{id}`
+
+Returns one named preset.
+
+### `POST /rule-presets`
+
+Request: `{ "name": "Preset name", "settings": { ... } }` using the settings
+object shown above. Duplicate names return `409`; invalid values return `400`.
+
+### `GET /system-parameters`
+
+Returns effective-dated history as `{ "key", "value", "effectiveFrom" }`
+records.
+
+### `POST /system-parameters`
+
+Request:
+
+```json
+{
+  "effectiveFrom": "2027-01-01",
+  "settings": {
+    "weeks1To5DaysPerMonth": 2.08,
+    "week6DaysPerMonth": 0.42,
+    "mainHolidayNoticeMonths": 3,
+    "otherHolidayNoticeMonths": 1,
+    "transfersEnabled": true
+  }
+}
+```
+
+The effective date must be in the future. Duplicate effective dates return
+`409`. Initial defaults are 2.08 days/month for weeks 1–5 and 0.42 days/month
+for week 6. Accrual is converted to hours using the effective schedule's
+average workday length. Monthly accruals store the rate and hours used, so
+later rule or schedule changes do not rewrite recorded history.
+
+Pending holiday requests reserve debt capacity. The maximum debt is one
+effective scheduled workweek combined across both holiday accounts.
 
 ## Planned final settlement
 

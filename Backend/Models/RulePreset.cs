@@ -12,6 +12,8 @@ public class RulePreset
     public string Code { get; set; } = string.Empty;
     [Column("Name")]
     public string Name { get; set; } = string.Empty;
+    [Column("SettingsJson")]
+    public string SettingsJson { get; set; } = "{}";
     [Column("AccrualRatePerMonth")]
     public decimal AccrualRatePerMonth { get; set; }
     [Column("Weeks1To5Enabled")]

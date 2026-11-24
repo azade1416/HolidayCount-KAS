@@ -24,8 +24,9 @@ function enumName(value: number | string, names: string[]): string {
     return names.find(name => name.toLowerCase() === normalized) ?? names[0];
 }
 
+const baseUrl = (import.meta.env.VITE_API_URL ?? "/api").replace(/\/?api\/?$/, "").replace(/\/$/, "");
 const { api } = new Api({
-    baseUrl: (import.meta.env.VITE_API_URL ?? "/api").replace(/\/?api\/?$/, "").replace(/\/$/, ""),
+    baseUrl,
     securityWorker: () => {
         const token = localStorage.getItem(TOKEN_KEY);
         return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
@@ -43,6 +44,69 @@ async function responseData<T>(request: Promise<Response>, parseJson = true): Pr
         if (error.status === 401) throw new Error("Request failed (401).");
         throw new Error(body?.message ?? body?.title ?? `Request failed (${error.status}).`);
     }
+}
+
+async function customRequest<T>(path: string, method: "GET" | "POST", body?: unknown): Promise<T> {
+    const token = localStorage.getItem(TOKEN_KEY);
+    let response: Response;
+    try {
+        response = await fetch(`${baseUrl}/api/${path}`, {
+            method,
+            headers: {
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...(body === undefined ? {} : { "Content-Type": "application/json" })
+            },
+            ...(body === undefined ? {} : { body: JSON.stringify(body) })
+        });
+    } catch (error) {
+        throw new Error(error instanceof Error ? error.message : "Could not reach the API.");
+    }
+
+    if (!response.ok) {
+        const errorBody = await response.json().catch(() => null);
+        throw new Error(errorBody?.message ?? errorBody?.title ?? `Request failed (${response.status}).`);
+    }
+    if (response.status === 204) return undefined as T;
+    return await response.json() as T;
+}
+
+export interface HolidayRuleSettings {
+    weeks1To5DaysPerMonth: number;
+    week6DaysPerMonth: number;
+    mainHolidayNoticeMonths: number;
+    otherHolidayNoticeMonths: number;
+    transfersEnabled: boolean;
+}
+
+export interface RulePreset {
+    id: string;
+    name: string;
+    settings: HolidayRuleSettings;
+}
+
+export interface SystemParameter {
+    key: string;
+    value: number | boolean;
+    effectiveFrom: string;
+}
+
+export function getRulePresets(): Promise<RulePreset[]> {
+    return customRequest("rule-presets", "GET");
+}
+
+export function createRulePreset(name: string, settings: HolidayRuleSettings): Promise<RulePreset> {
+    return customRequest("rule-presets", "POST", { name, settings });
+}
+
+export function getSystemParameters(): Promise<SystemParameter[]> {
+    return customRequest("system-parameters", "GET");
+}
+
+export function saveSystemParameters(
+    effectiveFrom: string,
+    settings: HolidayRuleSettings
+): Promise<SystemParameter[]> {
+    return customRequest("system-parameters", "POST", { effectiveFrom, settings });
 }
 
 const toPublicUser = (user: ApiUser): PublicUser => ({
