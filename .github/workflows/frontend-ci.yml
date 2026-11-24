@@ -1,0 +1,35 @@
+name: Frontend CI
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: Frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Versions are pinned in package.json.
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      # tsc checks the types, then Vite builds. Any type error fails the PR.
+      - name: Build
+        run: npm run build
