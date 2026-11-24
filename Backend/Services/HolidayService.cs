@@ -75,10 +75,7 @@ public class HolidayService : IHolidayService
                     continue;
                 }
 
-                var key = balance.AccountType == HolidayAccountType.Weeks1To5
-                    ? HolidayRuleSettingKeys.Weeks1To5DaysPerMonth
-                    : HolidayRuleSettingKeys.Week6DaysPerMonth;
-                var rate = await GetNumericRuleAsync(key, month);
+                var rate = await GetMonthlyAccrualDaysAsync(balance.AccountType, month);
                 var averageDayHours = await GetAverageScheduledDayHoursAsync(userId, month);
                 if (averageDayHours <= 0)
                     throw new InvalidOperationException($"No working schedule exists for {month:yyyy-MM}.");
@@ -140,10 +137,7 @@ public class HolidayService : IHolidayService
             }
             else
             {
-                var key = balance.AccountType == HolidayAccountType.Weeks1To5
-                    ? HolidayRuleSettingKeys.Weeks1To5DaysPerMonth
-                    : HolidayRuleSettingKeys.Week6DaysPerMonth;
-                var rate = await GetNumericRuleAsync(key, month);
+                var rate = await GetMonthlyAccrualDaysAsync(balance.AccountType, month);
                 var averageDayHours = await GetAverageScheduledDayHoursAsync(userId, month);
                 if (averageDayHours <= 0)
                     throw new InvalidOperationException($"No working schedule exists for {month:yyyy-MM}.");
@@ -214,16 +208,19 @@ public class HolidayService : IHolidayService
         return request;
     }
 
-    private async Task<decimal> GetNumericRuleAsync(string key, DateOnly effectiveDate)
+    private async Task<decimal> GetMonthlyAccrualDaysAsync(HolidayAccountType accountType, DateOnly effectiveDate)
     {
+        var key = accountType == HolidayAccountType.Weeks1To5
+            ? HolidayRuleSettingKeys.Weeks1To5HoursPerYear
+            : HolidayRuleSettingKeys.Week6HoursPerYear;
         var setting = await _db.SystemParameters
             .Where(x => x.Key == key && x.EffectiveFrom <= effectiveDate)
             .OrderByDescending(x => x.EffectiveFrom)
             .FirstOrDefaultAsync();
-        if (setting?.NumericValue is decimal value)
-            return value;
+        var annualHours = setting?.NumericValue
+            ?? (accountType == HolidayAccountType.Weeks1To5 ? 185m : 37m);
 
-        return key == HolidayRuleSettingKeys.Weeks1To5DaysPerMonth ? 2.08m : 0.42m;
+        return annualHours / 7.4m / 12m;
     }
 
     private async Task<bool> GetBooleanRuleAsync(string key, DateOnly effectiveDate, bool fallback)

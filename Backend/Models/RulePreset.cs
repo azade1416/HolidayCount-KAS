@@ -14,6 +14,18 @@ public class RulePreset
     public string Name { get; set; } = string.Empty;
     [Column("SettingsJson")]
     public string SettingsJson { get; set; } = "{}";
+    [Column("Version")]
+    public int Version { get; set; } = 1;
+    [Column("PreviousVersionId")]
+    public Guid? PreviousVersionId { get; set; }
+    [Column("Weeks1To5HoursPerYear")]
+    public decimal Weeks1To5HoursPerYear { get; set; } = 185m;
+    [Column("Week6HoursPerYear")]
+    public decimal Week6HoursPerYear { get; set; } = 37m;
+    [Column("MainHolidayNoticeMonths")]
+    public decimal MainHolidayNoticeMonths { get; set; } = 3m;
+    [Column("OtherHolidayNoticeMonths")]
+    public decimal OtherHolidayNoticeMonths { get; set; } = 1m;
     [Column("AccrualRatePerMonth")]
     public decimal AccrualRatePerMonth { get; set; }
     [Column("Weeks1To5Enabled")]

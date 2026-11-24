@@ -444,9 +444,9 @@ Public holidays can be created and edited only by `admin`.
 
 ## Rule presets and system parameters
 
-These endpoints require `admin`. Presets are reusable named settings. Saving
-rules creates an immutable effective-dated version; it does not rewrite
-existing monthly accrual records.
+These endpoints require `admin`. Preset revisions are immutable; older
+versions remain available. Saving an effective-dated rule set also creates a
+new preset revision and does not rewrite existing monthly accrual records.
 
 ### `GET /rule-presets`
 
@@ -457,12 +457,14 @@ Returns saved presets:
   {
     "id": "00000000-0000-0000-0000-000000000000",
     "name": "Business Esbjerg defaults",
+    "version": 1,
+    "previousVersionId": null,
+    "effectiveFrom": "2000-01-01",
     "settings": {
-      "weeks1To5DaysPerMonth": 2.08,
-      "week6DaysPerMonth": 0.42,
+      "weeks1To5HoursPerYear": 185,
+      "week6HoursPerYear": 37,
       "mainHolidayNoticeMonths": 3,
-      "otherHolidayNoticeMonths": 1,
-      "transfersEnabled": true
+      "otherHolidayNoticeMonths": 1
     }
   }
 ]
@@ -475,7 +477,8 @@ Returns one named preset.
 ### `POST /rule-presets`
 
 Request: `{ "name": "Preset name", "settings": { ... } }` using the settings
-object shown above. Duplicate names return `409`; invalid values return `400`.
+object shown above. Saving another preset revision with the same name creates
+the next version and retains its predecessor. Invalid values return `400`.
 
 ### `GET /system-parameters`
 
@@ -489,28 +492,23 @@ Request:
 ```json
 {
   "effectiveFrom": "2027-01-01",
+  "name": "Business Esbjerg defaults",
   "settings": {
-    "weeks1To5DaysPerMonth": 2.08,
-    "week6DaysPerMonth": 0.42,
+    "weeks1To5HoursPerYear": 185,
+    "week6HoursPerYear": 37,
     "mainHolidayNoticeMonths": 3,
-    "otherHolidayNoticeMonths": 1,
-    "transfersEnabled": true
+    "otherHolidayNoticeMonths": 1
   }
 }
 ```
 
 The effective date must be in the future. Duplicate effective dates return
-`409`. Initial defaults are 2.08 days/month for weeks 1–5 and 0.42 days/month
-for week 6. Accrual is converted to hours using the effective schedule's
-average workday length. Monthly accruals store the rate and hours used, so
-later rule or schedule changes do not rewrite recorded history.
+`409`. Initial defaults are 185 full-time hours/year for weeks 1–5 and 37
+hours/year for week 6. These correspond approximately to 2.08 and 0.42 days
+per month using a 7.4-hour standard full-time day. Accrual is converted to
+hours using the employee's effective schedule. Monthly accruals store the
+applied rate and schedule day length, so later rule or schedule changes do not
+rewrite recorded history.
 
 Pending holiday requests reserve debt capacity. The maximum debt is one
 effective scheduled workweek combined across both holiday accounts.
-
-## Planned final settlement
-
-`POST /balances/{id}/final-settlement` closes an employee balance when
-employment ends, records a payout and prevents duplicate payout. The request
-contains `settlementDate`, `reason` and `paymentMethod` (`direct` or
-`feriepengeinfo`). A repeated settlement returns `409`.

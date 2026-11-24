@@ -31,18 +31,25 @@ public class HolidayRulesTests : IClassFixture<ApiFactory>
         var presetName = $"Test preset {Guid.NewGuid():N}";
         var settings = new
         {
-            weeks1To5DaysPerMonth = 2.08m,
-            week6DaysPerMonth = 0.42m,
+            weeks1To5HoursPerYear = 185m,
+            week6HoursPerYear = 37m,
             mainHolidayNoticeMonths = 3m,
-            otherHolidayNoticeMonths = 1m,
-            transfersEnabled = true
+            otherHolidayNoticeMonths = 1m
         };
 
         var createdPreset = await _client.PostAsJsonAsync("/api/rule-presets", new { name = presetName, settings });
         Assert.Equal(HttpStatusCode.Created, createdPreset.StatusCode);
+        var firstPresetId = (await createdPreset.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+
+        var secondPreset = await _client.PostAsJsonAsync("/api/rule-presets", new { name = presetName, settings });
+        Assert.Equal(HttpStatusCode.Created, secondPreset.StatusCode);
+        var secondPresetJson = await secondPreset.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(2, secondPresetJson.GetProperty("version").GetInt32());
+        Assert.Equal(firstPresetId, secondPresetJson.GetProperty("previousVersionId").GetGuid());
 
         var presets = await _client.GetFromJsonAsync<JsonElement[]>("/api/rule-presets");
-        Assert.Contains(presets!, item => item.GetProperty("name").GetString() == presetName);
+        Assert.Equal(2, presets!.Count(item => item.GetProperty("name").GetString() == presetName));
 
         var effectiveFrom = new DateOnly(2100, 1, 1);
         var createdRules = await _client.PostAsJsonAsync("/api/system-parameters", new { effectiveFrom, settings });
@@ -50,8 +57,8 @@ public class HolidayRulesTests : IClassFixture<ApiFactory>
 
         var history = await _client.GetFromJsonAsync<JsonElement[]>("/api/system-parameters");
         Assert.Contains(history!, item =>
-            item.GetProperty("key").GetString() == "weeks1To5DaysPerMonth"
-            && item.GetProperty("effectiveFrom").GetDateTime().Date == effectiveFrom.ToDateTime(TimeOnly.MinValue));
+            item.GetProperty("key").GetString() == "weeks1To5HoursPerYear"
+            && item.GetProperty("effectiveFrom").GetString() == effectiveFrom.ToString("yyyy-MM-dd"));
     }
 
     [Fact]
@@ -66,8 +73,8 @@ public class HolidayRulesTests : IClassFixture<ApiFactory>
         var weeks1To5 = Assert.Single(first!, item => item.GetProperty("name").GetString() == "Weeks 1–5");
         var week6 = Assert.Single(first!, item => item.GetProperty("name").GetString() == "Week 6");
         var expectedMonths = 3;
-        Assert.Equal(49.92m, weeks1To5.GetProperty("accrued").GetProperty("hours").GetDecimal());
-        Assert.Equal(10.08m, week6.GetProperty("accrued").GetProperty("hours").GetDecimal());
+        Assert.Equal(50.01m, weeks1To5.GetProperty("accrued").GetProperty("hours").GetDecimal());
+        Assert.Equal(9.99m, week6.GetProperty("accrued").GetProperty("hours").GetDecimal());
 
         await _client.GetAsync($"/api/employees/{user.Id}/holiday-accounts");
         using var scope = _factory.Services.CreateScope();

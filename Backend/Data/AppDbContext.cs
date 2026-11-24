@@ -1,5 +1,6 @@
 using Backend.Models;
 using Backend.DTOs;
+using System.Text.Json;
 using LinqToDB;
 using LinqToDB.Async;
 using LinqToDB.Data;
@@ -165,12 +166,26 @@ public class AppDbContext : DataConnection
         await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""RulePresets"" (
             ""Id"" uuid PRIMARY KEY, ""Code"" varchar(100) NOT NULL UNIQUE, ""Name"" varchar(200) NOT NULL,
             ""SettingsJson"" text NOT NULL DEFAULT '{}',
+            ""Version"" integer NOT NULL DEFAULT 1,
+            ""PreviousVersionId"" uuid NULL REFERENCES ""RulePresets""(""Id"") ON DELETE SET NULL,
+            ""Weeks1To5HoursPerYear"" numeric(10,2) NOT NULL DEFAULT 185,
+            ""Week6HoursPerYear"" numeric(10,2) NOT NULL DEFAULT 37,
+            ""MainHolidayNoticeMonths"" numeric(5,2) NOT NULL DEFAULT 3,
+            ""OtherHolidayNoticeMonths"" numeric(5,2) NOT NULL DEFAULT 1,
             ""AccrualRatePerMonth"" numeric(8,4) NOT NULL, ""Weeks1To5Enabled"" boolean NOT NULL,
             ""Week6Enabled"" boolean NOT NULL, ""EffectiveFrom"" date NOT NULL, ""EffectiveTo"" date NULL,
             ""IsActive"" boolean NOT NULL, ""CreatedAtUtc"" timestamp with time zone NOT NULL,
             ""CreatedByUserId"" uuid NULL REFERENCES ""Users""(""Id"") ON DELETE SET NULL);");
         await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" ADD COLUMN IF NOT EXISTS ""SettingsJson"" text NOT NULL DEFAULT '{}';");
-        await this.ExecuteAsync(@"CREATE UNIQUE INDEX IF NOT EXISTS ""UX_RulePresets_Name_CI"" ON ""RulePresets"" (LOWER(""Name""));");
+        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" ADD COLUMN IF NOT EXISTS ""Version"" integer NOT NULL DEFAULT 1;");
+        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" ADD COLUMN IF NOT EXISTS ""PreviousVersionId"" uuid NULL REFERENCES ""RulePresets""(""Id"") ON DELETE SET NULL;");
+        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" ADD COLUMN IF NOT EXISTS ""Weeks1To5HoursPerYear"" numeric(10,2) NOT NULL DEFAULT 185;");
+        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" ADD COLUMN IF NOT EXISTS ""Week6HoursPerYear"" numeric(10,2) NOT NULL DEFAULT 37;");
+        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" ADD COLUMN IF NOT EXISTS ""MainHolidayNoticeMonths"" numeric(5,2) NOT NULL DEFAULT 3;");
+        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" ADD COLUMN IF NOT EXISTS ""OtherHolidayNoticeMonths"" numeric(5,2) NOT NULL DEFAULT 1;");
+        await this.ExecuteAsync(@"DROP INDEX IF EXISTS ""UX_RulePresets_Name_CI"";");
+        await this.ExecuteAsync(@"CREATE UNIQUE INDEX IF NOT EXISTS ""UX_RulePresets_Name_Version""
+            ON ""RulePresets"" (LOWER(""Name""), ""Version"");");
         await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""ScheduleChanges"" (
             ""Id"" uuid PRIMARY KEY, ""UserId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
             ""EffectiveFrom"" date NOT NULL, ""PreviousScheduleJson"" text NULL, ""NewScheduleJson"" text NOT NULL,
@@ -244,12 +259,19 @@ public class AppDbContext : DataConnection
     {
         var defaults = new (string Key, decimal? NumericValue, bool? BooleanValue, string Description)[]
         {
-            (HolidayRuleSettingKeys.Weeks1To5DaysPerMonth, 2.08m, null, "Holiday days earned per month for weeks 1–5."),
-            (HolidayRuleSettingKeys.Week6DaysPerMonth, 0.42m, null, "Holiday days earned per month for week 6."),
+            (HolidayRuleSettingKeys.Weeks1To5HoursPerYear, 185m, null, "Full-time annual holiday entitlement for weeks 1–5 in hours."),
+            (HolidayRuleSettingKeys.Week6HoursPerYear, 37m, null, "Full-time annual holiday entitlement for week 6 in hours."),
             (HolidayRuleSettingKeys.MainHolidayNoticeMonths, 3m, null, "Notice period for the main holiday."),
-            (HolidayRuleSettingKeys.OtherHolidayNoticeMonths, 1m, null, "Notice period for other holidays."),
-            (HolidayRuleSettingKeys.TransfersEnabled, null, true, "Whether unused holiday may be transferred.")
+            (HolidayRuleSettingKeys.OtherHolidayNoticeMonths, 1m, null, "Notice period for other holidays.")
         };
+
+        await this.ExecuteAsync(@"
+            UPDATE ""SystemParameters""
+            SET ""Key"" = 'weeks1To5HoursPerYear', ""NumericValue"" = ""NumericValue"" * 7.4 * 12
+            WHERE ""Key"" = 'weeks1To5DaysPerMonth';
+            UPDATE ""SystemParameters""
+            SET ""Key"" = 'week6HoursPerYear', ""NumericValue"" = ""NumericValue"" * 7.4 * 12
+            WHERE ""Key"" = 'week6DaysPerMonth';");
 
         foreach (var setting in defaults)
         {
@@ -264,6 +286,29 @@ public class AppDbContext : DataConnection
                 BooleanValue = setting.BooleanValue,
                 EffectiveFrom = HolidayRuleSettingKeys.DefaultsEffectiveFrom,
                 Description = setting.Description
+            });
+        }
+
+        if (!await this.RulePresets.AnyAsync())
+        {
+            var settings = new HolidayRuleSettingsDto();
+            await this.InsertAsync(new RulePreset
+            {
+                Id = Guid.NewGuid(),
+                Code = "business-esbjerg-defaults-v1",
+                Name = "Business Esbjerg defaults",
+                SettingsJson = JsonSerializer.Serialize(settings, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                Version = 1,
+                Weeks1To5HoursPerYear = settings.Weeks1To5HoursPerYear,
+                Week6HoursPerYear = settings.Week6HoursPerYear,
+                MainHolidayNoticeMonths = settings.MainHolidayNoticeMonths,
+                OtherHolidayNoticeMonths = settings.OtherHolidayNoticeMonths,
+                AccrualRatePerMonth = 2.08m,
+                Weeks1To5Enabled = true,
+                Week6Enabled = true,
+                EffectiveFrom = HolidayRuleSettingKeys.DefaultsEffectiveFrom,
+                IsActive = true,
+                CreatedAtUtc = DateTime.UtcNow
             });
         }
     }
