@@ -13,6 +13,9 @@ namespace Backend.Tests;
 // Starts the real API in memory, connected to a throwaway PostgreSQL in Docker.
 public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
+    // The only address allowed to call the API from a browser in tests.
+    public const string ClientOrigin = "https://client.example";
+
     private readonly PostgreSqlContainer _database = new PostgreSqlBuilder("postgres:15-alpine").Build();
 
     // 1. Test settings: the test database and a test JWT key (never the real one).
@@ -20,6 +23,7 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         builder.UseSetting("ConnectionStrings:DefaultConnection", _database.GetConnectionString());
         builder.UseSetting("Jwt:Key", "test-only-signing-key-at-least-32-bytes");
+        builder.UseSetting("Cors:AllowedOrigin", ClientOrigin);
     }
 
     // 2. Start the database before the tests, remove it after.
