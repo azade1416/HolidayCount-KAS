@@ -2,7 +2,6 @@ using System.Text.Json;
 using Backend.Data;
 using Backend.DTOs;
 using Backend.Models;
-using Backend.Services;
 using LinqToDB;
 using LinqToDB.Async;
 using Microsoft.AspNetCore.Authorization;
@@ -17,18 +16,16 @@ public class RulePresetsController : ControllerBase
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly AppDbContext _db;
-    private readonly ITokenService _tokens;
 
-    public RulePresetsController(AppDbContext db, ITokenService tokens)
+    public RulePresetsController(AppDbContext db)
     {
         _db = db;
-        _tokens = tokens;
     }
 
     [HttpGet]
     public async Task<IActionResult> List()
     {
-        var presets = await _db.RulePresets.OrderBy(x => x.Name).ThenBy(x => x.Version).ToListAsync();
+        var presets = await _db.RulePresets.OrderBy(x => x.Name).ToListAsync();
         return Ok(presets.Select(ToResponse));
     }
 
@@ -48,33 +45,11 @@ public class RulePresetsController : ControllerBase
         if (!IsValid(dto.Settings))
             return BadRequest(new { message = "Rule values are outside the allowed range." });
 
-        var user = await _tokens.ValidateAndGetUserAsync(User);
-        if (user == null) return Unauthorized();
-
-        var previous = await _db.RulePresets
-            .Where(x => x.Name.ToLower() == name.ToLower())
-            .OrderByDescending(x => x.Version)
-            .FirstOrDefaultAsync();
-        var version = (previous?.Version ?? 0) + 1;
         var preset = new RulePreset
         {
             Id = Guid.NewGuid(),
-            Code = Guid.NewGuid().ToString("N"),
             Name = name,
-            SettingsJson = JsonSerializer.Serialize(dto.Settings, JsonOptions),
-            Version = version,
-            PreviousVersionId = previous?.Id,
-            Weeks1To5HoursPerYear = dto.Settings.Weeks1To5HoursPerYear,
-            Week6HoursPerYear = dto.Settings.Week6HoursPerYear,
-            MainHolidayNoticeMonths = dto.Settings.MainHolidayNoticeMonths,
-            OtherHolidayNoticeMonths = dto.Settings.OtherHolidayNoticeMonths,
-            AccrualRatePerMonth = dto.Settings.Weeks1To5HoursPerYear / 7.4m / 12m,
-            Weeks1To5Enabled = true,
-            Week6Enabled = dto.Settings.Week6HoursPerYear > 0,
-            EffectiveFrom = DateOnly.FromDateTime(DateTime.UtcNow),
-            IsActive = true,
-            CreatedAtUtc = DateTime.UtcNow,
-            CreatedByUserId = user.Id
+            Settings = JsonSerializer.Serialize(dto.Settings, JsonOptions)
         };
 
         await _db.InsertAsync(preset);
@@ -82,24 +57,13 @@ public class RulePresetsController : ControllerBase
     }
 
     private static RulePresetResponseDto ToResponse(RulePreset preset)
-    {
-        var settings = new HolidayRuleSettingsDto
-        {
-            Weeks1To5HoursPerYear = preset.Weeks1To5HoursPerYear,
-            Week6HoursPerYear = preset.Week6HoursPerYear,
-            MainHolidayNoticeMonths = preset.MainHolidayNoticeMonths,
-            OtherHolidayNoticeMonths = preset.OtherHolidayNoticeMonths
-        };
-        return new RulePresetResponseDto
+        => new()
         {
             Id = preset.Id,
             Name = preset.Name,
-            Version = preset.Version,
-            PreviousVersionId = preset.PreviousVersionId,
-            EffectiveFrom = preset.EffectiveFrom,
-            Settings = settings
+            Settings = JsonSerializer.Deserialize<HolidayRuleSettingsDto>(preset.Settings, JsonOptions)
+                ?? throw new InvalidOperationException($"Preset '{preset.Id}' has invalid settings.")
         };
-    }
 
     private static bool IsValid(HolidayRuleSettingsDto settings)
         => settings.Weeks1To5HoursPerYear is >= 0 and <= 500

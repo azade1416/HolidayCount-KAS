@@ -3,6 +3,7 @@ using Backend.DTOs;
 using Backend.Models;
 using LinqToDB;
 using LinqToDB.Async;
+using System.Text.Json;
 
 namespace Backend.Services;
 
@@ -217,8 +218,14 @@ public class HolidayService : IHolidayService
             .Where(x => x.Key == key && x.EffectiveFrom <= effectiveDate)
             .OrderByDescending(x => x.EffectiveFrom)
             .FirstOrDefaultAsync();
-        var annualHours = setting?.NumericValue
-            ?? (accountType == HolidayAccountType.Weeks1To5 ? 185m : 37m);
+        var annualHours = accountType == HolidayAccountType.Weeks1To5 ? 185m : 37m;
+        if (setting != null)
+        {
+            using var value = JsonDocument.Parse(setting.Value);
+            annualHours = value.RootElement.ValueKind == JsonValueKind.Number
+                ? value.RootElement.GetDecimal()
+                : throw new InvalidOperationException($"System parameter '{key}' must have a numeric value.");
+        }
 
         return annualHours / 7.4m / 12m;
     }
@@ -229,7 +236,16 @@ public class HolidayService : IHolidayService
             .Where(x => x.Key == key && x.EffectiveFrom <= effectiveDate)
             .OrderByDescending(x => x.EffectiveFrom)
             .FirstOrDefaultAsync();
-        return setting?.BooleanValue ?? fallback;
+        if (setting == null)
+            return fallback;
+
+        using var value = JsonDocument.Parse(setting.Value);
+        return value.RootElement.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => throw new InvalidOperationException($"System parameter '{key}' must have a boolean value.")
+        };
     }
 
     private async Task<decimal> GetAverageScheduledDayHoursAsync(Guid userId, DateOnly month)

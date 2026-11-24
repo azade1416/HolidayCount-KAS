@@ -7,6 +7,7 @@ using Backend.Models;
 using Backend.Services;
 using LinqToDB;
 using LinqToDB.Async;
+using LinqToDB.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -24,7 +25,7 @@ public class HolidayRulesTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Admin_can_save_and_list_a_preset_and_future_rule_version()
+    public async Task Admin_can_save_and_list_presets_and_future_rules()
     {
         var token = await _factory.TokenForNewUser("admin");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -45,8 +46,9 @@ public class HolidayRulesTests : IClassFixture<ApiFactory>
         var secondPreset = await _client.PostAsJsonAsync("/api/rule-presets", new { name = presetName, settings });
         Assert.Equal(HttpStatusCode.Created, secondPreset.StatusCode);
         var secondPresetJson = await secondPreset.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal(2, secondPresetJson.GetProperty("version").GetInt32());
-        Assert.Equal(firstPresetId, secondPresetJson.GetProperty("previousVersionId").GetGuid());
+        Assert.NotEqual(firstPresetId, secondPresetJson.GetProperty("id").GetGuid());
+        Assert.Equal(185m, secondPresetJson.GetProperty("settings")
+            .GetProperty("weeks1To5HoursPerYear").GetDecimal());
 
         var presets = await _client.GetFromJsonAsync<JsonElement[]>("/api/rule-presets");
         Assert.Equal(2, presets!.Count(item => item.GetProperty("name").GetString() == presetName));
@@ -58,7 +60,59 @@ public class HolidayRulesTests : IClassFixture<ApiFactory>
         var history = await _client.GetFromJsonAsync<JsonElement[]>("/api/system-parameters");
         Assert.Contains(history!, item =>
             item.GetProperty("key").GetString() == "weeks1To5HoursPerYear"
-            && item.GetProperty("effectiveFrom").GetString() == effectiveFrom.ToString("yyyy-MM-dd"));
+            && item.GetProperty("effectiveFrom").GetString() == effectiveFrom.ToString("yyyy-MM-dd")
+            && item.GetProperty("value").GetDecimal() == 185m);
+    }
+
+    [Fact]
+    public async Task Schema_upgrade_preserves_preset_and_system_parameter_values()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        await db.ExecuteAsync(@"DROP TABLE ""RulePresets"";");
+        await db.ExecuteAsync(@"DROP TABLE ""SystemParameters"";");
+        await db.ExecuteAsync(@"CREATE TABLE ""SystemParameters"" (
+            ""Id"" uuid PRIMARY KEY, ""Key"" varchar(100) NOT NULL,
+            ""NumericValue"" numeric(14,4) NULL, ""TextValue"" text NULL, ""BooleanValue"" boolean NULL,
+            ""EffectiveFrom"" date NOT NULL, ""EffectiveTo"" date NULL, ""Description"" text NULL,
+            CONSTRAINT ""SystemParameters_Key_EffectiveFrom_key"" UNIQUE (""Key"", ""EffectiveFrom""));");
+        await db.ExecuteAsync(@"INSERT INTO ""SystemParameters""
+            (""Id"", ""Key"", ""NumericValue"", ""EffectiveFrom"")
+            VALUES ('10000000-0000-0000-0000-000000000001', 'weeks1To5DaysPerMonth', 2.0833, '2000-01-01');");
+        await db.ExecuteAsync(@"INSERT INTO ""SystemParameters""
+            (""Id"", ""Key"", ""BooleanValue"", ""EffectiveFrom"")
+            VALUES ('10000000-0000-0000-0000-000000000002', 'transfersEnabled', true, '2000-01-01');");
+        await db.ExecuteAsync(@"CREATE TABLE ""RulePresets"" (
+            ""Id"" uuid PRIMARY KEY, ""Code"" varchar(100) NOT NULL UNIQUE, ""Name"" varchar(200) NOT NULL,
+            ""SettingsJson"" text NOT NULL DEFAULT '{}', ""Version"" integer NOT NULL DEFAULT 1,
+            ""PreviousVersionId"" uuid NULL, ""Weeks1To5HoursPerYear"" numeric(10,2) NOT NULL DEFAULT 185,
+            ""Week6HoursPerYear"" numeric(10,2) NOT NULL DEFAULT 37,
+            ""MainHolidayNoticeMonths"" numeric(5,2) NOT NULL DEFAULT 3,
+            ""OtherHolidayNoticeMonths"" numeric(5,2) NOT NULL DEFAULT 1,
+            ""AccrualRatePerMonth"" numeric(8,4) NOT NULL, ""Weeks1To5Enabled"" boolean NOT NULL,
+            ""Week6Enabled"" boolean NOT NULL, ""EffectiveFrom"" date NOT NULL, ""EffectiveTo"" date NULL,
+            ""IsActive"" boolean NOT NULL, ""CreatedAtUtc"" timestamp with time zone NOT NULL,
+            ""CreatedByUserId"" uuid NULL);");
+        await db.ExecuteAsync(@"INSERT INTO ""RulePresets""
+            (""Id"", ""Code"", ""Name"", ""SettingsJson"", ""AccrualRatePerMonth"",
+             ""Weeks1To5Enabled"", ""Week6Enabled"", ""EffectiveFrom"", ""IsActive"", ""CreatedAtUtc"")
+            VALUES ('20000000-0000-0000-0000-000000000001', 'legacy', 'Legacy preset',
+                '{""weeks1To5HoursPerYear"":185,""week6HoursPerYear"":37,""mainHolidayNoticeMonths"":3,""otherHolidayNoticeMonths"":1}',
+                2.08, true, true, '2000-01-01', true, now());");
+
+        await db.EnsureSchemaAsync();
+        await db.EnsureDefaultRuleSettingsAsync();
+
+        var migratedHours = await db.SystemParameters.FirstAsync(x => x.Key == "weeks1To5HoursPerYear");
+        using var hoursJson = JsonDocument.Parse(migratedHours.Value);
+        Assert.InRange(hoursJson.RootElement.GetDecimal(), 184.9m, 185.1m);
+        var migratedTransferSetting = await db.SystemParameters.FirstAsync(x => x.Key == "transfersEnabled");
+        Assert.Equal("true", migratedTransferSetting.Value);
+
+        var migratedPreset = await db.RulePresets.FirstAsync(x => x.Name == "Legacy preset");
+        using var presetJson = JsonDocument.Parse(migratedPreset.Settings);
+        Assert.Equal(185m, presetJson.RootElement.GetProperty("weeks1To5HoursPerYear").GetDecimal());
     }
 
     [Fact]

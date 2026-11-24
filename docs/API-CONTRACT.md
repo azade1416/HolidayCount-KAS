@@ -444,9 +444,11 @@ Public holidays can be created and edited only by `admin`.
 
 ## Rule presets and system parameters
 
-These endpoints require `admin`. Preset revisions are immutable; older
-versions remain available. Saving an effective-dated rule set also creates a
-new preset revision and does not rewrite existing monthly accrual records.
+These endpoints require `admin`. Presets store their settings as one JSON
+object. System parameters store a JSON scalar value and an effective date;
+the database enforces uniqueness for each key and effective date. Saving an
+effective-dated rule set also stores a named preset and does not rewrite
+existing monthly accrual records.
 
 ### `GET /rule-presets`
 
@@ -457,9 +459,6 @@ Returns saved presets:
   {
     "id": "00000000-0000-0000-0000-000000000000",
     "name": "Business Esbjerg defaults",
-    "version": 1,
-    "previousVersionId": null,
-    "effectiveFrom": "2000-01-01",
     "settings": {
       "weeks1To5HoursPerYear": 185,
       "week6HoursPerYear": 37,
@@ -477,13 +476,13 @@ Returns one named preset.
 ### `POST /rule-presets`
 
 Request: `{ "name": "Preset name", "settings": { ... } }` using the settings
-object shown above. Saving another preset revision with the same name creates
-the next version and retains its predecessor. Invalid values return `400`.
+object shown above. Each request creates a preset record with its own GUID.
+Invalid values return `400`.
 
 ### `GET /system-parameters`
 
 Returns effective-dated history as `{ "key", "value", "effectiveFrom" }`
-records.
+records. `value` retains its JSON scalar type, such as a number or boolean.
 
 ### `POST /system-parameters`
 

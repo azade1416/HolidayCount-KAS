@@ -25,16 +25,13 @@ public class RulePresetResponseDto
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
-    public int Version { get; set; }
-    public Guid? PreviousVersionId { get; set; }
-    public DateOnly EffectiveFrom { get; set; }
     public HolidayRuleSettingsDto Settings { get; set; } = new();
 }
 
 public class SystemParameterResponseDto
 {
     public string Key { get; set; } = string.Empty;
-    public object Value { get; set; } = 0m;
+    public object? Value { get; set; }
     public DateOnly EffectiveFrom { get; set; }
 }
 
