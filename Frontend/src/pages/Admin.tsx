@@ -7,31 +7,32 @@ import {
 import type { PublicUser, Announcement } from "../admin";
 import type { ScheduleChange, WeeklySchedule } from "../employee";
 import CreateEmployee from "./CreateEmployee";
+import Presets from "./Presets";
 
 const formatSchedule = (s?: WeeklySchedule) =>
     s ? WORKDAYS.map(d => `${d}: ${s[d].from}–${s[d].to}`).join("\n") : "Not set";
 
 const headers = ["Name", "Email", "Role", "Actions", "Working Schedule", "Working Schedule History"];
 
-function Admin() {
+export default function Admin() {
     const [users, setUsers] = useState<PublicUser[]>([]);
     const [currentUserId, setCurrentUserId] = useState<string>();
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [message, setMessage] = useState("");
     const [editing, setEditing] = useState<PublicUser | "new">();
     const [history, setHistory] = useState<{ user: PublicUser; changes: ScheduleChange[] }>();
+    const [showPresets, setShowPresets] = useState(false);
     const navigate = useNavigate();
 
     const load = async () => {
-        const [u, me, a] = await Promise.all([getUsers(), getCurrentUser(), getAnnouncements()]);
-        setUsers(u);
+        const [accounts, me, notices] = await Promise.all([getUsers(), getCurrentUser(), getAnnouncements()]);
+        setUsers(accounts);
         setCurrentUserId(me?.id);
-        setAnnouncements(a);
+        setAnnouncements(notices);
     };
 
     useEffect(() => { void load(); }, []);
 
-    // Runs an action, reloads the data, and alerts on failure
     const run = async (action: () => Promise<unknown>, fallback: string) => {
         try {
             await action();
@@ -58,6 +59,7 @@ function Admin() {
                 <h1>Admin</h1>
                 <div>
                     <button className="admin-button" onClick={() => setEditing("new")}>Create Employee Account</button>
+                    <button className="admin-button" onClick={() => setShowPresets(true)}>Holiday presets</button>
                     <button className="admin-button" onClick={async () => { await logout(); navigate("/login"); }}>Sign out</button>
                 </div>
             </div>
@@ -65,9 +67,7 @@ function Admin() {
             <div className="section">
                 <h2>User Management</h2>
                 <table className="table">
-                    <thead>
-                    <tr>{headers.map(h => <th key={h}>{h}</th>)}</tr>
-                    </thead>
+                    <thead><tr>{headers.map(h => <th key={h}>{h}</th>)}</tr></thead>
                     <tbody>
                     {users.map(user => (
                         <tr key={user.id}>
@@ -116,6 +116,8 @@ function Admin() {
                 ))}
             </div>
 
+            {showPresets && <Presets onClose={() => setShowPresets(false)} />}
+
             {editing && (
                 <CreateEmployee
                     user={editing === "new" ? undefined : editing}
@@ -129,9 +131,7 @@ function Admin() {
                     <div className="modal">
                         <h3>{history.user.name} – Working Schedule History</h3>
                         <table className="table">
-                            <thead>
-                            <tr><th>Working Schedule (Time)</th><th>Working Schedule (Date)</th></tr>
-                            </thead>
+                            <thead><tr><th>Working Schedule (Time)</th><th>Working Schedule (Date)</th></tr></thead>
                             <tbody>
                             {[...history.changes].reverse().map(c => (
                                 <tr key={c.id}>
@@ -151,5 +151,3 @@ function Admin() {
         </div>
     );
 }
-
-export default Admin;

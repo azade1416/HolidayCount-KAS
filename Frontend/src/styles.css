@@ -207,3 +207,16 @@ button:disabled { background: #c5cbc6; color: white; cursor: not-allowed; }
 .accountant-dialog.balance-dialog { max-width: 850px; }
 .dialog-heading { display: flex; justify-content: space-between; align-items: center; }
 .accountant-cell { padding: 10px; border-bottom: 1px solid #eee; text-align: left; }
+.presets-modal { width: min(560px, 95vw); max-height: 90vh; overflow: auto; box-sizing: border-box; }
+.presets-modal label {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(110px, 38%);
+    align-items: center;
+    gap: 12px;
+}
+.presets-modal label > :is(input, select) { min-width: 0; width: 100%; box-sizing: border-box; }
+.presets-modal label:has(> input[type="number"]) { grid-template-columns: minmax(0, 1fr) 76px; }
+.presets-modal form h3 { margin: 14px 0 2px; }
+.presets-modal form p { margin: 0; }
+.presets-modal form > button { justify-self: end; }
+.presets-modal details { margin-top: 14px; }
