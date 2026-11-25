@@ -4,6 +4,10 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using Backend.Data;
+using Backend.Models;
+using LinqToDB;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Backend.Tests;
@@ -60,23 +64,37 @@ public class AuthorizationTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Employee_cannot_read_another_employees_leave_request()
     {
-        // Arrange: employee A creates a leave request
-        var tokenA = await _factory.TokenForNewUser("employee");
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenA);
-        var created = await _client.PostAsJsonAsync("/api/leaverequests", new
+        // Arrange: seed employee A's request directly; this test targets read authorization.
+        Guid requestId;
+        using (var scope = _factory.Services.CreateScope())
         {
-            accountType = 0, // Weeks1To5
-            startDate = "2027-02-01",
-            endDate = "2027-02-02",
-            requestedDays = 2
-        });
-        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
-        var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var owner = new User
+            {
+                FullName = "Employee A",
+                Email = $"employee-a-{Guid.NewGuid():N}@example.com",
+                PasswordHash = "unused",
+                Role = "employee"
+            };
+            await db.InsertAsync(owner);
+
+            var request = new LeaveRequest
+            {
+                UserId = owner.Id,
+                AccountType = HolidayAccountType.Weeks1To5,
+                StartDate = new DateOnly(2027, 2, 1),
+                EndDate = new DateOnly(2027, 2, 2),
+                RequestedDays = 2,
+                RequestedHours = 16
+            };
+            await db.InsertAsync(request);
+            requestId = request.Id;
+        }
 
         // Act: employee B asks for A's request by id
         var tokenB = await _factory.TokenForNewUser("employee");
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenB);
-        var response = await _client.GetAsync($"/api/leaverequests/{id}");
+        var response = await _client.GetAsync($"/api/leaverequests/{requestId}");
 
         // Assert: same answer as a request that does not exist
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
