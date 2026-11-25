@@ -1,0 +1,14 @@
+# Fly.io config for the API. Deploy from this folder with: fly deploy
+# Secrets (DB connection, Jwt__Key, Cors__AllowedOrigin, seed passwords) are set with fly secrets set, never here.
+app = 'holidaycount-api'
+primary_region = 'arn'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0

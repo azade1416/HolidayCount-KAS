@@ -1,0 +1,3 @@
+# Keep local files out of the image
+node_modules/
+dist/
