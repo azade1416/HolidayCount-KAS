@@ -63,11 +63,16 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// CORS: browsers may call the API only from the client's address.
+// Locally it comes from appsettings.json; in production from the Cors__AllowedOrigin variable.
+var allowedOrigin = builder.Configuration["Cors:AllowedOrigin"]
+    ?? throw new InvalidOperationException("Cors:AllowedOrigin is not configured.");
+
 builder.Services.AddCors(options => options
     .AddPolicy("CorsPolicy", policy => policy
+        .WithOrigins(allowedOrigin)
         .AllowAnyHeader()
-        .AllowAnyMethod()
-        .AllowAnyOrigin()));
+        .AllowAnyMethod()));
 
 var app = builder.Build();
 
