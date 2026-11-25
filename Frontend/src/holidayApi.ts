@@ -11,6 +11,7 @@ type ApiRequest = {
     id: string; userId: string; accountType: number | string; requestType: number | string;
     originalRequestId?: string | null; startDate: string; endDate: string;
     status: number | string; submittedAtUtc: string; reviewedAtUtc?: string | null;
+    requestedHours?: number;
 };
 
 function roleName(role: string): SystemRole {
@@ -213,6 +214,7 @@ export async function getRequests(): Promise<AccountantRequest[]> {
     return requests.map(item => ({
         id: item.id, employee: names.get(item.userId) ?? "Employee",
         dates: `${item.startDate} – ${item.endDate}`,
+        requestedHours: item.requestedHours,
         status: enumName(item.status, ["Pending", "Approved", "Rejected", "Cancelled"]),
         submittedDate: item.submittedAtUtc.slice(0, 10),
         type: enumName(item.requestType, ["Holiday", "Cancellation", "Transfer"]) as AccountantRequest["type"]

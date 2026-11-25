@@ -89,7 +89,7 @@ function Accountant() {
             key: r.id,
             cells: [
                 <button className="employee-link" onClick={() => user && openEmployee(user)}>{r.employee}</button>,
-                position(user), r.dates, typeLabel(r.type), r.submittedDate,
+                position(user), r.dates, r.requestedHours?.toFixed(2) ?? "—", typeLabel(r.type), r.submittedDate,
                 <>
                     <button onClick={() => decide(r.id, true)}>Approve</button>
                     <button onClick={() => decide(r.id, false)}>Decline</button>
@@ -125,7 +125,7 @@ function Accountant() {
 
             <div className="section">
                 <h2>Requests</h2>
-                <Table head={["Employee", "Position", "Dates", "Type", "Submitted", "Actions"]}
+                <Table head={["Employee", "Position", "Dates", "Requested hours", "Type", "Submitted", "Actions"]}
                        rows={requestRows} empty="No pending requests." />
             </div>
 

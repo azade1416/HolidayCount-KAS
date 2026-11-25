@@ -261,7 +261,7 @@ function Employee() {
                         <p className="employee-muted">Your current weekly working hours.</p>
                     </div>
                     <div className="employee-table-slot">
-                        <Table heads={weekdays} rows={[weekdays.map(workingHours)]} />
+                        <Table heads={weekdays.map(day => day.slice(0, 3))} rows={[weekdays.map(workingHours)]} />
                     </div>
                 </div>
             </div>

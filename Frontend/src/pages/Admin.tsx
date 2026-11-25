@@ -98,7 +98,7 @@ export default function Admin() {
         setHistory({ user, changes: await getScheduleHistory(user.id) });
 
     return (
-        <div className="dashboard">
+        <div className="dashboard admin-dashboard">
             <div className="header">
                 <h1>Admin</h1>
                 <div>

@@ -41,6 +41,7 @@ button:disabled { background: #c5cbc6; color: white; cursor: not-allowed; }
 .login h1 { text-align: center; }
 .login label { display: block; margin-top: 20px; }
 .login input { width: 100%; padding: 10px; margin-top: 5px; }
+.login-error { color: #a52e23; }
 .login button { padding: 12px; margin-top: 15px; cursor: pointer; }
 .login button:last-child { width: 100%; }
 
@@ -58,6 +59,8 @@ button:disabled { background: #c5cbc6; color: white; cursor: not-allowed; }
 .header p, .header h1 { margin: 5px; color: black; font-size: 30px; font-weight: bold; }
 .header > div, .header-actions { display: flex; gap: 10px; }
 .header button { width: 230px; padding: 12px; margin: 0; }
+.admin-dashboard .header > div { flex-wrap: wrap; min-width: 0; }
+.admin-dashboard .header button { flex: 1 1 145px; max-width: 230px; }
 
 /* Sections */
 .section {
@@ -107,6 +110,9 @@ button:disabled { background: #c5cbc6; color: white; cursor: not-allowed; }
 /* Table */
 .table { table-layout: fixed; text-align: left; }
 .table th, .table td { padding: 14px; border-bottom: 1px solid #ddd; }
+.admin-dashboard .table { overflow-wrap: anywhere; }
+.admin-dashboard .schedule-text { white-space: pre-wrap; }
+.admin-dashboard .table button { max-width: calc(100% - 8px); }
 
 /* Announcements */
 .announcement-input { width: 100%; padding: 10px; }
