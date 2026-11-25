@@ -2,7 +2,7 @@ import type { Employee, WeeklySchedule, ScheduleChange, MockHolidayAccount, Mock
 import type { SystemRole, PublicUser, CreateEmployeeData, Announcement } from "./admin";
 import type { AccountantRequest } from "./accountant";
 
-import { Api, type CreateUserDto } from "./generated/client";
+import { Api, type CreateUserDto, type CreateRulePresetDto, type SaveHolidayRulesDto } from "./generated/client";
 
 const TOKEN_KEY = "holidaycount_token";
 
@@ -44,6 +44,18 @@ async function responseData<T>(request: Promise<Response>, parseJson = true): Pr
         throw new Error(body?.message ?? body?.title ?? `Request failed (${error.status}).`);
     }
 }
+
+type PresetSettings = Required<NonNullable<CreateRulePresetDto["settings"]>>;
+export type RulePreset = { id: string; name: string; settings: PresetSettings };
+export type SystemParameter = { key: string; value: unknown; effectiveFrom: string };
+
+export const getRulePresets = () => responseData<RulePreset[]>(api.rulePresetsList());
+
+export const createRulePreset = (data: CreateRulePresetDto) => responseData<RulePreset>(api.rulePresetsCreate(data));
+
+export const getSystemParameters = () => responseData<SystemParameter[]>(api.systemParametersList());
+
+export const saveSystemParameters = (data: SaveHolidayRulesDto) => responseData<SystemParameter[]>(api.systemParametersCreate(data));
 
 const toPublicUser = (user: ApiUser): PublicUser => ({
     id: user.id, name: user.name ?? user.fullName ?? "", email: user.email,

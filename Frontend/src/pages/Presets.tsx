@@ -1,4 +1,8 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import {
+    createRulePreset, getRulePresets, getSystemParameters, saveSystemParameters,
+    type RulePreset, type SystemParameter
+} from "../holidayApi";
 
 const fields = {
     weeks1To5HoursPerYear: "Weeks 1–5 entitlement (full-time hours per year)",
@@ -8,84 +12,93 @@ const fields = {
 };
 
 type Key = keyof typeof fields;
-type Settings = Record<Key, number>;
-type Parameter = { key: string; value: number | boolean; effectiveFrom: string };
-type RulePreset = { id: string; name: string; settings: Settings };
 
-const defaultPreset: RulePreset = {
-    id: "business-esbjerg",
-    name: "Business Esbjerg defaults",
-    settings: { weeks1To5HoursPerYear: 185, week6HoursPerYear: 37, mainHolidayNoticeMonths: 3, otherHolidayNoticeMonths: 1 }
-};
-
-const historyLabels: Record<string, string> = {
-    ...fields,
-    weeks1To5DaysPerMonth: "Weeks 1–5 days earned per month",
-    week6HoursPerMonth: "Week 6 hours earned per month",
-    week6Enabled: "Enable Week 6",
-    transfersEnabled: "Allow holiday transfer"
-};
-
-const rulesKey = "holidaycount.systemParameters";
-const presetsKey = "holidaycount.namedRulePresets";
 const keys = Object.keys(fields) as Key[];
 
-function readSaved<T>(key: string): T[] {
-    return JSON.parse(localStorage.getItem(key) ?? "[]");
+function activeSettings(parameters: SystemParameter[]): Partial<RulePreset["settings"]> {
+    const today = new Date().toISOString().slice(0, 10);
+    const settings: Partial<RulePreset["settings"]> = {};
+    for (const key of keys) {
+        const active = parameters
+            .filter(row => row.key === key && row.effectiveFrom <= today)
+            .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
+        if (typeof active?.value === "number") settings[key] = active.value;
+    }
+    return settings;
+}
+
+function validSettings(settings: Partial<RulePreset["settings"]>) {
+    return keys.every(key => {
+        const value = settings[key];
+        return typeof value === "number" && Number.isFinite(value) && value >= 0;
+    });
 }
 
 export default function Presets({ onClose }: { onClose: () => void }) {
-    const [presets, setPresets] = useState(() => readSaved<RulePreset>(presetsKey));
-    const [presetId, setPresetId] = useState(defaultPreset.id);
+    const [presets, setPresets] = useState<RulePreset[]>([]);
+    const [presetId, setPresetId] = useState("");
     const [presetName, setPresetName] = useState("");
     const [presetMessage, setPresetMessage] = useState("");
-    const [settings, setSettings] = useState(defaultPreset.settings);
+    const [settings, setSettings] = useState<Partial<RulePreset["settings"]>>({});
     const [effectiveFrom, setEffectiveFrom] = useState("");
-    const [parameters, setParameters] = useState(() => readSaved<Parameter>(rulesKey));
     const [message, setMessage] = useState("");
-    const availablePresets = [defaultPreset, ...presets];
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState("");
+    const [saving, setSaving] = useState(false);
+    const saveDisabled = loading || !!loadError || saving;
 
-    function savePreset() {
+    useEffect(() => {
+        void Promise.all([getRulePresets(), getSystemParameters()])
+            .then(([savedPresets, savedParameters]) => {
+                setPresets(savedPresets);
+                setSettings(activeSettings(savedParameters));
+            })
+            .catch(() => setLoadError("Could not load presets and rules. Close and reopen to retry."))
+            .finally(() => setLoading(false));
+    }, []);
+
+    async function savePreset() {
         const name = presetName.trim();
-        if (!name || !keys.every(key => Number.isFinite(settings[key]) && settings[key] >= 0)) {
+        if (!name || !validSettings(settings)) {
             return setPresetMessage("Enter a name and a valid value for each setting.");
         }
+        setSaving(true);
         try {
-            const saved = readSaved<RulePreset>(presetsKey);
-            if ([defaultPreset, ...saved].some(preset => preset.name.toLowerCase() === name.toLowerCase())) {
-                setPresets(saved);
-                return setPresetMessage("A preset with that name already exists.");
-            }
-            const preset = { id: crypto.randomUUID(), name, settings };
-            const next = [...saved, preset];
-            localStorage.setItem(presetsKey, JSON.stringify(next));
-            setPresets(next);
+            const preset = await createRulePreset({ name, settings });
+            setPresets(current => [...current, preset]);
             setPresetId(preset.id);
             setPresetName("");
             setPresetMessage("Preset saved.");
-        } catch {
-            setPresetMessage("Could not save the preset in this browser.");
+        } catch (error) {
+            setPresetMessage(error instanceof Error ? error.message : "Could not save the preset.");
+        } finally {
+            setSaving(false);
         }
     }
 
-    function saveRules(event: FormEvent<HTMLFormElement>) {
+    async function saveRules(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Copenhagen" });
         if (effectiveFrom <= today) {
             return setMessage("Choose a future start date.");
         }
+        if (!validSettings(settings)) {
+            return setMessage("Enter a valid value for each setting.");
+        }
+        const name = presetName.trim() || presets.find(preset => preset.id === presetId)?.name;
+        setSaving(true);
         try {
-            const saved = readSaved<Parameter>(rulesKey);
-            if (saved.some(row => row.effectiveFrom === effectiveFrom && keys.some(key => key === row.key))) {
-                setParameters(saved);
-                return setMessage("A rule set is already saved for that date.");
-            }
-            const next = [...saved, ...keys.map(key => ({ key, value: settings[key], effectiveFrom }))];
-            localStorage.setItem(rulesKey, JSON.stringify(next));
-            setParameters(next);
-            setMessage("Rule set saved in this browser.");
-        } catch {
-            setMessage("Could not save rules in this browser.");
+            await saveSystemParameters({ name, settings, effectiveFrom });
+            await getRulePresets()
+                .then(presets => {
+                    setPresets(presets);
+                    setMessage("Rule set saved.");
+                })
+                .catch(() => setMessage("Rule set saved. Reopen Holiday presets to refresh the preset list."));
+        } catch (error) {
+            setMessage(error instanceof Error ? error.message : "Could not save rules.");
+        } finally {
+            setSaving(false);
         }
     }
 
@@ -93,11 +106,12 @@ export default function Presets({ onClose }: { onClose: () => void }) {
         <div className="modal-overlay">
             <div className="modal presets-modal" role="dialog" aria-modal="true" aria-labelledby="presets-title">
                 <h3 id="presets-title">Holiday presets</h3>
-                <p>Preview only. Presets and rules are saved in this browser.</p>
+                {loading && <p role="status">Loading presets and rules…</p>}
+                {loadError && <p role="alert">{loadError}</p>}
                 <label>
                     Load preset{" "}
                     <select value={presetId} onChange={event => {
-                        const selected = availablePresets.find(preset => preset.id === event.target.value);
+                        const selected = presets.find(preset => preset.id === event.target.value);
                         if (!selected) return;
                         setPresetId(selected.id);
                         setSettings(selected.settings);
@@ -105,7 +119,7 @@ export default function Presets({ onClose }: { onClose: () => void }) {
                         setMessage("");
                     }}>
                         <option value="" disabled>Choose a preset</option>
-                        {availablePresets.map(preset => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+                        {presets.map(preset => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
                     </select>
                 </label>
                 <form onSubmit={saveRules}>
@@ -113,9 +127,9 @@ export default function Presets({ onClose }: { onClose: () => void }) {
                     {keys.map(key => (
                         <label key={key}>
                             {fields[key]}{" "}
-                            <input type="number" min="0" step="any" required value={Number.isNaN(settings[key]) ? "" : settings[key]}
+                            <input type="number" min="0" step="any" required value={settings[key] ?? ""}
                                 onChange={event => {
-                                    setSettings({ ...settings, [key]: event.target.valueAsNumber });
+                                    setSettings({ ...settings, [key]: event.target.value === "" ? undefined : event.target.valueAsNumber });
                                     setPresetId("");
                                 }} />
                         </label>
@@ -125,7 +139,7 @@ export default function Presets({ onClose }: { onClose: () => void }) {
                         Preset name{" "}
                         <input value={presetName} onChange={event => setPresetName(event.target.value)} />
                     </label>
-                    <button className="admin-button" type="button" onClick={savePreset}>Save as preset</button>
+                    <button className="admin-button" type="button" disabled={saveDisabled} onClick={savePreset}>Save as preset</button>
                     {presetMessage && <p role="status">{presetMessage}</p>}
                     <label>
                         Effective from{" "}
@@ -134,26 +148,10 @@ export default function Presets({ onClose }: { onClose: () => void }) {
                     </label>
                     {message && <p role="status">{message}</p>}
                     <div className="modal-buttons">
-                        <button className="admin-button" type="submit">Save rules</button>
+                        <button className="admin-button" type="submit" disabled={saveDisabled}>Save rules</button>
                         <button className="admin-button" type="button" onClick={onClose}>Close</button>
                     </div>
                 </form>
-                {parameters.length > 0 && (
-                    <details>
-                        <summary>Saved rule history</summary>
-                        <table className="table">
-                            <thead><tr><th>Effective from</th><th>Setting</th><th>Value</th></tr></thead>
-                            <tbody>
-                                {parameters.map(({ key, value, effectiveFrom }) => (
-                                    <tr key={key + effectiveFrom}>
-                                        <td>{effectiveFrom}</td><td>{historyLabels[key] ?? key}</td>
-                                        <td>{typeof value === "boolean" ? (value ? "Yes" : "No") : value}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </details>
-                )}
             </div>
         </div>
     );
