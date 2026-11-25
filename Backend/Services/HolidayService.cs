@@ -15,6 +15,12 @@ public class HolidayService : IHolidayService
     }
 
     public async Task<decimal> CalculateHoursAsync(Guid userId, DateOnly startDate, DateOnly endDate)
+        => (await CalculateLeaveDurationAsync(userId, startDate, endDate)).Hours;
+
+    private async Task<(decimal Hours, decimal Days)> CalculateLeaveDurationAsync(
+        Guid userId,
+        DateOnly startDate,
+        DateOnly endDate)
     {
         if (startDate > endDate)
             throw new ArgumentException("StartDate must be before or equal to EndDate.");
@@ -31,6 +37,7 @@ public class HolidayService : IHolidayService
             .ToListAsync();
 
         decimal hours = 0;
+        decimal days = 0;
         for (var date = startDate; date <= endDate; date = date.AddDays(1))
         {
             if (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
@@ -45,11 +52,18 @@ public class HolidayService : IHolidayService
                 .OrderByDescending(x => x.EffectiveFrom)
                 .FirstOrDefault();
 
-            if (schedule != null)
-                hours += (decimal)(schedule.EndTime - schedule.StartTime).TotalHours;
+            if (schedule == null)
+                continue;
+
+            var scheduledHours = (decimal)(schedule.EndTime - schedule.StartTime).TotalHours;
+            if (scheduledHours <= 0)
+                continue;
+
+            hours += scheduledHours;
+            days++;
         }
 
-        return decimal.Round(hours, 2);
+        return (decimal.Round(hours, 2), days);
     }
 
     public async Task<LeaveRequest> CreateHolidayAsync(Guid userId, Guid accountId, DateOnly startDate, DateOnly endDate)
@@ -61,7 +75,8 @@ public class HolidayService : IHolidayService
         if (balance == null)
             throw new KeyNotFoundException("Holiday account not found.");
 
-        var requestedHours = await CalculateHoursAsync(userId, startDate, endDate);
+        var (requestedHours, requestedDays) =
+            await CalculateLeaveDurationAsync(userId, startDate, endDate);
         if (requestedHours <= 0)
             throw new InvalidOperationException("The request contains no working hours.");
 
@@ -78,7 +93,7 @@ public class HolidayService : IHolidayService
             StartDate = startDate,
             EndDate = endDate,
             RequestedHours = requestedHours,
-            RequestedDays = decimal.Round(requestedHours / 7.4m, 2),
+            RequestedDays = requestedDays,
             SubmittedAtUtc = DateTime.UtcNow,
             Status = LeaveRequestStatus.Pending
         };
