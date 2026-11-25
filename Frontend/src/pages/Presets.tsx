@@ -50,8 +50,10 @@ export default function Presets({ onClose }: { onClose: () => void }) {
     useEffect(() => {
         void Promise.all([getRulePresets(), getSystemParameters()])
             .then(([savedPresets, savedParameters]) => {
+                const companyPreset = savedPresets.find(preset => preset.name === "Business Esbjerg defaults");
                 setPresets(savedPresets);
-                setSettings(activeSettings(savedParameters));
+                setPresetId(companyPreset?.id ?? "");
+                setSettings(companyPreset?.settings ?? activeSettings(savedParameters));
             })
             .catch(() => setLoadError("Could not load presets and rules. Close and reopen to retry."))
             .finally(() => setLoading(false));

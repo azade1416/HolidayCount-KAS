@@ -1,12 +1,12 @@
-import { useEffect, useState, type ChangeEvent, type ComponentProps, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type ComponentProps, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
     getCurrentUser, getHolidayAccounts, getEmployeeRequestHistory,
     getApprovedHolidayRequests, getEmployees, createHolidayRequest,
     createCancellationRequest, getFutureBalance, createTransferRequest, logout, CALENDAR_WEEKDAYS,
-    type FutureBalance
+    getAnnouncements, type FutureBalance
 } from "../holidayApi";
-import type { PublicUser } from "../admin";
+import type { Announcement, PublicUser } from "../admin";
 import type { MockHolidayAccount, MockRequest, WeeklySchedule, Employee as EmployeeType } from "../employee";
 import HolidayCalendar from "./HolidayCalendar";
 
@@ -24,8 +24,20 @@ function Row({ title, onSubmit, children }: {
     </div>;
 }
 
-function DateField({ label, ...props }: Omit<ComponentProps<"input">, "type"> & { label: string }) {
-    return <label>{label}<input className="employee-input" type="date" {...props} /></label>;
+function InputField({ label, ...props }: ComponentProps<"input"> & { label: string }) {
+    return <label>{label}<input className="employee-input" {...props} /></label>;
+}
+
+function ChoiceField({ label, placeholder, children, ...props }: ComponentProps<"select"> & {
+    label: string;
+    placeholder: string;
+}) {
+    return <label>{label}
+        <select className="employee-input" {...props}>
+            <option value="">{placeholder}</option>
+            {children}
+        </select>
+    </label>;
 }
 
 function Table({ heads, rows, empty, className = "" }: {
@@ -46,9 +58,12 @@ function Employee() {
     const navigate = useNavigate();
     const [user, setUser] = useState<PublicUser | null>(null);
     const [accounts, setAccounts] = useState<MockHolidayAccount[]>([]);
-    const [history, setHistory] = useState<MockRequest[]>([]);
     const [approved, setApproved] = useState<MockRequest[]>([]);
     const [employees, setEmployees] = useState<EmployeeType[]>([]);
+    const [announcements, setAnnouncements] = useState<Announcement[]>();
+    const [announcementsError, setAnnouncementsError] = useState(false);
+    const announcementsDialog = useRef<HTMLDialogElement>(null);
+    const [history, setHistory] = useState<MockRequest[]>([]);
     const [form, setForm] = useState(emptyForm);
     const [month, setMonth] = useState(new Date());
     const [bookingError, setBookingError] = useState("");
@@ -61,20 +76,23 @@ function Employee() {
         const current = await getCurrentUser();
         if (!current) return navigate("/");
         setUser(current);
-        const [a, h, all, staff] = await Promise.all([
+        const [accounts, history, approved, employees] = await Promise.all([
             getHolidayAccounts(current.id),
             getEmployeeRequestHistory(),
             getApprovedHolidayRequests(),
             getEmployees()
         ]);
-        setAccounts(a);
-        setForm(f => ({ ...f, accountId: a.some(x => x.id === f.accountId) ? f.accountId : a[0]?.id ?? "" }));
-        setHistory(h);
-        setApproved(all);
-        setEmployees(staff);
+        setAccounts(accounts);
+        setApproved(approved);
+        setEmployees(employees);
+        setForm(f => ({ ...f, accountId: accounts.some(a => a.id === f.accountId) ? f.accountId : accounts[0]?.id ?? "" }));
+        setHistory(history);
     }
 
-    useEffect(() => { void loadData(); }, []);
+    useEffect(() => {
+        void loadData();
+        void getAnnouncements().then(setAnnouncements).catch(() => setAnnouncementsError(true));
+    }, []);
 
     const approvedHolidays = approved.filter(r =>
         r.employeeId === user?.id && (r.type ?? "Holiday") === "Holiday"
@@ -84,7 +102,7 @@ function Employee() {
     const [writtenAgreement, setWrittenAgreement] = useState(false);
     const [transfer, setTransfer] = useState<{ loading?: boolean; submitted?: boolean; error?: string }>({});
 
-    const transferAccount = accounts.find(a => a.id === transferAccountId);
+    const canTransfer = accounts.some(a => a.id === transferAccountId) && writtenAgreement && !transfer.loading;
 
     async function calculateFutureBalance(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -98,10 +116,10 @@ function Employee() {
 
     async function submitTransfer(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        if (!transferAccount || !writtenAgreement || transfer.loading) return;
+        if (!canTransfer) return;
         setTransfer({ loading: true });
         try {
-            const request = await createTransferRequest(transferAccount.id, Number(transferHours), writtenAgreement);
+            const request = await createTransferRequest(transferAccountId, Number(transferHours), writtenAgreement);
             setHistory(previous => [request, ...previous]);
             setForm(previous => ({ ...previous, transferHours: "" }));
             setWrittenAgreement(false);
@@ -153,33 +171,32 @@ function Employee() {
         <div className="employee-page">
             <div className="employee-header">
                 {user?.name}　Employee
+                <button onClick={() => announcementsDialog.current?.showModal()}>
+                    View announcement
+                </button>
                 <button onClick={async () => { await logout(); navigate("/"); }}>Sign out</button>
             </div>
 
             <div className="employee-cards">
                 <div className="employee-card">
                     <Row title="Book holiday">
-                        <label>Holiday account
-                            <select className="employee-input" value={accountId} onChange={set("accountId")}>
-                                <option value="">Select holiday account</option>
-                                {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                            </select>
-                        </label>
-                        <DateField label="From" value={startDate} onChange={set("startDate")} />
-                        <DateField label="To" value={endDate} onChange={set("endDate")} />
+                        <ChoiceField label="Holiday account" placeholder="Select holiday account"
+                                     value={accountId} onChange={set("accountId")}>
+                            {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        </ChoiceField>
+                        <InputField label="From" type="date" value={startDate} onChange={set("startDate")} />
+                        <InputField label="To" type="date" value={endDate} onChange={set("endDate")} />
                         <button onClick={submitRequest} disabled={!accounts.length}>Submit holiday request</button>
                         {bookingError && <span className="employee-error">{bookingError}</span>}
                     </Row>
 
                     <Row title="Request holiday cancellation">
-                        <label>Approved holiday
-                            <select className="employee-input" value={cancellationId} onChange={set("cancellationId")}>
-                                <option value="">Select approved holiday</option>
-                                {approvedHolidays.map(r =>
-                                    <option key={r.id} value={r.id}>{r.account}: {r.startDate} – {r.endDate}</option>
-                                )}
-                            </select>
-                        </label>
+                        <ChoiceField label="Approved holiday" placeholder="Select approved holiday"
+                                     value={cancellationId} onChange={set("cancellationId")}>
+                            {approvedHolidays.map(r =>
+                                <option key={r.id} value={r.id}>{r.account}: {r.startDate} - {r.endDate}</option>
+                            )}
+                        </ChoiceField>
                         <button onClick={submitCancellation} disabled={!approvedHolidays.length}>
                             Submit cancellation request
                         </button>
@@ -187,7 +204,7 @@ function Employee() {
                     </Row>
 
                     <Row title="Future holiday balance" onSubmit={calculateFutureBalance}>
-                        <DateField label="Select a future date" value={futureDate} required disabled={future.loading}
+                        <InputField label="Select a future date" type="date" value={futureDate} required disabled={future.loading}
                                    onChange={event => {
                                        set("futureDate")(event);
                                        setFuture({});
@@ -206,27 +223,21 @@ function Employee() {
                     </Row>
 
                     <Row title="Unused holiday transfer" onSubmit={submitTransfer}>
-                        <label>Holiday account
-                            <select className="employee-input" value={transferAccountId} required disabled={transfer.loading}
-                                    onChange={set("transferAccountId")}>
-                                <option value="">Select holiday account</option>
-                                {accounts.map(a => <option key={a.id} value={a.id}>
-                                    {a.name} ({a.eligibleDate}, {a.remaining.hours.toFixed(2)} hours left)
-                                </option>)}
-                            </select>
-                        </label>
-                        <label>Hours to transfer
-                            <input className="employee-input" type="number" value={transferHours} required disabled={transfer.loading}
-                                   step="any"
-                                   onChange={set("transferHours")} />
-                        </label>
+                        <ChoiceField label="Holiday account" placeholder="Select holiday account" value={transferAccountId}
+                                     required disabled={transfer.loading} onChange={set("transferAccountId")}>
+                            {accounts.map(a => <option key={a.id} value={a.id}>
+                                {a.name} ({a.eligibleDate}, {a.remaining.hours.toFixed(2)} hours left)
+                            </option>)}
+                        </ChoiceField>
+                        <InputField label="Hours to transfer" type="number" value={transferHours}
+                                    required disabled={transfer.loading} step="any" onChange={set("transferHours")} />
                         <label>
                             <input type="checkbox" checked={writtenAgreement} required disabled={transfer.loading}
                                    onChange={event => setWrittenAgreement(event.target.checked)} />
                             I have a written agreement for this transfer.
                         </label>
                         <div className="future-balance">
-                            <button disabled={!transferAccount || !transferHours || !writtenAgreement || transfer.loading}
+                            <button disabled={!canTransfer || !transferHours}
                                     aria-busy={transfer.loading}>Request transfer</button>
                             {transfer.submitted && <span className="employee-muted" role="status">Transfer request submitted for approval.</span>}
                         </div>
@@ -254,6 +265,18 @@ function Employee() {
                     </div>
                 </div>
             </div>
+
+            <dialog ref={announcementsDialog} className="employee-announcements-dialog" aria-labelledby="announcements-title">
+                <h3 id="announcements-title">Announcements</h3>
+                {announcementsError && <p role="alert">Could not load announcements.</p>}
+                {announcements?.length === 0 && <p>No announcements yet.</p>}
+                {!!announcements?.length && (
+                    <div className="employee-announcements" tabIndex={0} role="region" aria-label="Announcements">
+                        {announcements.map(a => <p key={a.id}>{a.date} · {a.message}</p>)}
+                    </div>
+                )}
+                <button onClick={() => announcementsDialog.current?.close()}>Close</button>
+            </dialog>
 
             <div className="employee-card calendar-card">
                 <div className="calendar-heading">

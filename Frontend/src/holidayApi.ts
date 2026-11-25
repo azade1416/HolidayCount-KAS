@@ -239,3 +239,13 @@ export async function sendAnnouncement(message: string): Promise<void> {
 export async function getAnnouncements(): Promise<Announcement[]> {
     return responseData<Announcement[]>(api.announcementsList());
 }
+
+export type PublicHoliday = { id: string; name: string; date: string; isCompanySpecific: boolean };
+
+export const getPublicHolidays = () => responseData<PublicHoliday[]>(api.publicHolidaysList());
+
+export function savePublicHoliday({ id, ...holiday }: PublicHoliday) {
+    return responseData<PublicHoliday>(id ? api.publicHolidaysUpdate(id, holiday) : api.publicHolidaysCreate(holiday));
+}
+
+export const deletePublicHoliday = (id: string) => responseData<void>(api.publicHolidaysDelete(id), false);
