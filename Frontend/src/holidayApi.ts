@@ -178,6 +178,17 @@ export async function getHolidayAccounts(employeeId: string): Promise<MockHolida
     return responseData<MockHolidayAccount[]>(api.employeesHolidayAccountsList(employeeId));
 }
 
+export type FutureBalance = { id: string; name: string; remainingHours: number };
+
+export function getFutureBalance(date: string) {
+    return responseData<FutureBalance[]>(api.holidayAccountsFutureBalanceList({ date }));
+}
+
+export async function createTransferRequest(accountId: string, hours: number, writtenAgreement: boolean) {
+    const request = await responseData<ApiRequest>(api.leaveRequestsTransferCreate({ accountId, hours, writtenAgreement }));
+    return toMockRequest(request);
+}
+
 export async function createHolidayRequest(accountId: string, startDate: string, endDate: string): Promise<void> {
     await responseData<void>(api.leaveRequestsCreate({ accountId, startDate, endDate, requestedDays: 1, requestedHours: 0 }), false);
 }

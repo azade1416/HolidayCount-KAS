@@ -10,7 +10,10 @@ import type { MockRequest, MockHolidayAccount, Employee } from "../employee";
 import type { PublicUser } from "../admin";
 import HolidayCalendar from "./HolidayCalendar";
 
-const typeLabel = (type: string) => type === "Cancellation" ? "Cancel holiday" : "Request holiday";
+const typeLabel = (type: string) => {
+    if (type === "Transfer") return "Transfer holiday";
+    return type === "Cancellation" ? "Cancel holiday" : "Request holiday";
+};
 const position = (u?: PublicUser) => u?.employmentType || "—";
 
 function Table({ head, rows, empty, tableClass = "table", cellClass }: {
