@@ -71,18 +71,47 @@ public class HolidayService : IHolidayService
         if (startDate > endDate)
             throw new ArgumentException("StartDate must be before or equal to EndDate.");
 
+        await using var transaction = await _db.BeginTransactionAsync();
+        var employee = await _db.Users.FirstOrDefaultAsync(x => x.Id == userId);
+        if (employee == null)
+            throw new KeyNotFoundException("Employee not found.");
+
+        // Serialize balance checks for this employee so concurrent requests cannot overspend.
+        await _db.UpdateAsync(employee);
+
         var balance = await _db.HolidayBalances.FirstOrDefaultAsync(x => x.Id == accountId && x.UserId == userId);
         if (balance == null)
             throw new KeyNotFoundException("Holiday account not found.");
+        if (balance.UsagePeriodStart > startDate || balance.UsagePeriodEnd < endDate)
+            throw new InvalidOperationException("The selected account is not valid for the requested dates.");
 
         var (requestedHours, requestedDays) =
             await CalculateLeaveDurationAsync(userId, startDate, endDate);
         if (requestedHours <= 0)
             throw new InvalidOperationException("The request contains no working hours.");
 
-        var available = balance.EarnedHours - balance.UsedHours - balance.TransferredHours;
-        if (requestedHours > available + 37)
-            throw new InvalidOperationException("Maximum holiday debt is one week.");
+        var applicableBalances = await _db.HolidayBalances
+            .Where(x => x.UserId == userId
+                && x.UsagePeriodStart <= startDate
+                && x.UsagePeriodEnd >= endDate)
+            .ToListAsync();
+        var pendingRequests = await _db.LeaveRequests
+            .Where(x => x.UserId == userId
+                && x.Status == LeaveRequestStatus.Pending
+                && (x.RequestType == LeaveRequestType.Holiday
+                    || x.RequestType == LeaveRequestType.Transfer))
+            .ToListAsync();
+        var pendingHours = pendingRequests
+            .Where(request => applicableBalances.Any(account =>
+                account.AccountType == request.AccountType
+                && account.UsagePeriodStart <= request.StartDate
+                && account.UsagePeriodEnd >= request.EndDate))
+            .Sum(request => request.RequestedHours);
+        var availableHours = applicableBalances.Sum(account =>
+            account.EarnedHours - account.UsedHours - account.TransferredHours);
+        if (requestedHours + pendingHours > availableHours)
+            throw new InvalidOperationException(
+                "The holiday balance must be non-negative by the end of the earning period.");
 
         var request = new LeaveRequest
         {
@@ -99,6 +128,7 @@ public class HolidayService : IHolidayService
         };
 
         await _db.InsertAsync(request);
+        await transaction.CommitAsync();
         return request;
     }
 
@@ -143,13 +173,28 @@ public class HolidayService : IHolidayService
         if (hours <= 0 || hours > 37)
             throw new ArgumentException("Transfer is limited to at most 37.00 hours.");
 
+        await using var transaction = await _db.BeginTransactionAsync();
+        var employee = await _db.Users.FirstOrDefaultAsync(x => x.Id == userId);
+        if (employee == null)
+            throw new KeyNotFoundException("Employee not found.");
+        await _db.UpdateAsync(employee);
+
         var balance = await _db.HolidayBalances.FirstOrDefaultAsync(x => x.Id == accountId && x.UserId == userId);
         if (balance == null)
             throw new KeyNotFoundException("Holiday account not found.");
         if (balance.AccountType != HolidayAccountType.Weeks1To5)
             throw new InvalidOperationException("Only the Weeks 1–5 balance can be transferred.");
 
-        var available = balance.EarnedHours - balance.UsedHours - balance.TransferredHours;
+        var pendingHours = await _db.LeaveRequests
+            .Where(x => x.UserId == userId
+                && x.AccountType == balance.AccountType
+                && x.Status == LeaveRequestStatus.Pending
+                && (x.RequestType == LeaveRequestType.Holiday
+                    || x.RequestType == LeaveRequestType.Transfer)
+                && x.StartDate >= balance.UsagePeriodStart
+                && x.EndDate <= balance.UsagePeriodEnd)
+            .SumAsync(x => (decimal?)x.RequestedHours) ?? 0;
+        var available = balance.EarnedHours - balance.UsedHours - balance.TransferredHours - pendingHours;
         if (hours > available)
             throw new InvalidOperationException("Transfer exceeds available holiday.");
 
@@ -167,6 +212,7 @@ public class HolidayService : IHolidayService
             Status = LeaveRequestStatus.Pending
         };
         await _db.InsertAsync(request);
+        await transaction.CommitAsync();
         return request;
     }
 

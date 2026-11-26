@@ -83,7 +83,8 @@ public class LeaveRequestInputTests : IClassFixture<ApiFactory>
                 EarningPeriodStart = periodStart,
                 EarningPeriodEnd = periodEnd,
                 UsagePeriodStart = periodStart,
-                UsagePeriodEnd = periodEnd
+                UsagePeriodEnd = periodEnd,
+                EarnedHours = 40
             };
             await db.InsertAsync(account);
             foreach (var day in new[]
