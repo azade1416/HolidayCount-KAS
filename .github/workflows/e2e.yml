@@ -32,8 +32,15 @@ jobs:
         run: docker compose -f docker-compose.yml -f e2e/docker-compose.e2e.yml up -d --build
 
       - name: Wait for the API
-        # Any HTTP answer (401 here) means the API is up.
-        run: curl -s -o /dev/null --retry 30 --retry-delay 2 --retry-connrefused http://localhost:5033/api/auth/me
+        # 401 means the API is up and asks for a login. On timeout, print its logs.
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5033/api/auth/me || true)
+            [ "$code" = "401" ] && exit 0
+            sleep 2
+          done
+          docker compose logs backend
+          exit 1
 
       - name: Set up Node 22
         uses: actions/setup-node@v4
