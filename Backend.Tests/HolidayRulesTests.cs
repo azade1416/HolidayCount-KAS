@@ -190,7 +190,7 @@ public class HolidayRulesTests : IClassFixture<ApiFactory>
         var requestId = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
 
         var beforeApproval = await GetFutureRemainingAsync(date, "Weeks 1–5");
-        var reviewerToken = await _factory.TokenForNewUser("accountant");
+        var reviewerToken = await GetReviewerTokenAsync();
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", reviewerToken);
         var approval = await _client.PostAsync($"/api/leave-requests/{requestId}/approve", null);
         Assert.Equal(HttpStatusCode.OK, approval.StatusCode);
@@ -200,6 +200,43 @@ public class HolidayRulesTests : IClassFixture<ApiFactory>
         Assert.Equal(8m, beforeApproval - afterApproval);
     }
 
+    [Fact]
+    public async Task Concurrent_approval_of_one_request_deducts_balance_once_and_returns_conflict()
+    {
+        var (_, employeeToken, accounts) = await CreateEmployeeAsync(accrualPeriodStartsTwoMonthsAgo: true);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", employeeToken);
+        var date = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(14);
+        while (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+            date = date.AddDays(1);
+        var created = await _client.PostAsJsonAsync("/api/leave-requests", new
+        {
+            accountId = accounts[0].Id,
+            startDate = date,
+            endDate = date,
+            requestedDays = 1,
+            requestedHours = 0
+        });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var requestId = (await created.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+
+        var reviewerToken = await _factory.TokenForNewUser("accountant");
+        _client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", reviewerToken);
+        var approvals = await Task.WhenAll(
+            _client.PostAsync($"/api/leave-requests/{requestId}/approve", null),
+            _client.PostAsync($"/api/leave-requests/{requestId}/approve", null));
+
+        Assert.Single(approvals, response => response.StatusCode == HttpStatusCode.OK);
+        Assert.Single(approvals, response => response.StatusCode == HttpStatusCode.Conflict);
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var balance = await db.HolidayBalances.FirstAsync(x => x.Id == accounts[0].Id);
+        Assert.Equal(8m, balance.UsedHours);
+        Assert.Equal(1, await db.HolidayTransactions.CountAsync(x =>
+            x.LeaveRequestId == requestId && x.TransactionType == HolidayTransactionType.Usage));
+    }
+
     private async Task<decimal> GetFutureRemainingAsync(DateOnly date, string accountName)
     {
         var response = await _client.GetAsync($"/api/holiday-accounts/future-balance?date={date:yyyy-MM-dd}");
@@ -207,6 +244,16 @@ public class HolidayRulesTests : IClassFixture<ApiFactory>
         var accounts = await response.Content.ReadFromJsonAsync<JsonElement[]>();
         return Assert.Single(accounts!, item => item.GetProperty("name").GetString() == accountName)
             .GetProperty("remainingHours").GetDecimal();
+    }
+
+    private async Task<string> GetReviewerTokenAsync()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var reviewer = await db.Users.FirstOrDefaultAsync(x => x.Role == "accountant")
+            ?? await db.Users.FirstOrDefaultAsync(x => x.Role == "admin")
+            ?? throw new InvalidOperationException("No reviewer account exists in the test database.");
+        return scope.ServiceProvider.GetRequiredService<ITokenService>().GenerateToken(reviewer);
     }
 
     private async Task<(User User, string Token, HolidayBalance[] Accounts)> CreateEmployeeAsync(
