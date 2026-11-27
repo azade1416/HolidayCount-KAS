@@ -1,0 +1,5 @@
+# Used only by the E2E workflow: expose the API on the port the Vite dev proxy expects.
+services:
+  backend:
+    ports:
+      - "5033:8080"
