@@ -241,6 +241,106 @@ public class HolidayAccountBehaviorTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.Conflict, secondRequest.StatusCode);
     }
 
+    [Fact]
+    public async Task Cancellation_is_rejected_after_start_and_cannot_be_approved_later()
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        User employee;
+        HolidayBalance account;
+        LeaveRequest pastHoliday;
+        LeaveRequest futureHoliday;
+        string employeeToken;
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            employee = new User
+            {
+                FullName = "Cancellation test employee",
+                Email = $"cancel-{Guid.NewGuid():N}@example.com",
+                PasswordHash = "unused",
+                Role = "employee",
+                EmploymentStartDate = today.AddYears(-1)
+            };
+            await db.InsertAsync(employee);
+            employeeToken = scope.ServiceProvider.GetRequiredService<ITokenService>()
+                .GenerateToken(employee);
+            account = new HolidayBalance
+            {
+                UserId = employee.Id,
+                AccountType = HolidayAccountType.Weeks1To5,
+                EarningYear = today.Year,
+                EarningPeriodStart = today.AddYears(-1),
+                EarningPeriodEnd = today.AddYears(1),
+                UsagePeriodStart = today.AddYears(-1),
+                UsagePeriodEnd = today.AddYears(1),
+                EarnedHours = 40,
+                UsedHours = 16
+            };
+            await db.InsertAsync(account);
+            pastHoliday = ApprovedHoliday(employee.Id, today.AddDays(-1));
+            futureHoliday = ApprovedHoliday(employee.Id, today.AddDays(1));
+            await db.InsertAsync(pastHoliday);
+            await db.InsertAsync(futureHoliday);
+        }
+
+        _client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", employeeToken);
+        var pastCancellation = await _client.PostAsync(
+            $"/api/leave-requests/{pastHoliday.Id}/cancel", null);
+        Assert.Equal(HttpStatusCode.Conflict, pastCancellation.StatusCode);
+
+        var futureCancellation = await _client.PostAsync(
+            $"/api/leave-requests/{futureHoliday.Id}/cancel", null);
+        Assert.Equal(HttpStatusCode.Created, futureCancellation.StatusCode);
+
+        LeaveRequest pendingCancellation;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            pendingCancellation = new LeaveRequest
+            {
+                UserId = employee.Id,
+                AccountType = account.AccountType,
+                RequestType = LeaveRequestType.Cancellation,
+                OriginalRequestId = pastHoliday.Id,
+                StartDate = pastHoliday.StartDate,
+                EndDate = pastHoliday.EndDate,
+                RequestedDays = pastHoliday.RequestedDays,
+                RequestedHours = pastHoliday.RequestedHours,
+                Status = LeaveRequestStatus.Pending
+            };
+            await db.InsertAsync(pendingCancellation);
+        }
+
+        _client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", await GetAdminTokenAsync());
+        var approval = await _client.PostAsync(
+            $"/api/leave-requests/{pendingCancellation.Id}/approve", null);
+        Assert.Equal(HttpStatusCode.Conflict, approval.StatusCode);
+
+        using var updatedScope = _factory.Services.CreateScope();
+        var updatedDb = updatedScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.Equal(16m, (await updatedDb.HolidayBalances.FirstAsync(x => x.Id == account.Id)).UsedHours);
+        Assert.Equal(LeaveRequestStatus.Approved,
+            (await updatedDb.LeaveRequests.FirstAsync(x => x.Id == pastHoliday.Id)).Status);
+        Assert.Equal(LeaveRequestStatus.Pending,
+            (await updatedDb.LeaveRequests.FirstAsync(x => x.Id == pendingCancellation.Id)).Status);
+    }
+
+    private static LeaveRequest ApprovedHoliday(Guid userId, DateOnly date)
+        => new()
+        {
+            UserId = userId,
+            AccountType = HolidayAccountType.Weeks1To5,
+            RequestType = LeaveRequestType.Holiday,
+            StartDate = date,
+            EndDate = date,
+            RequestedDays = 1,
+            RequestedHours = 8,
+            Status = LeaveRequestStatus.Approved
+        };
+
     private static Dictionary<DayOfWeek, DailyScheduleDto> Weekdays(string from, string to)
         => new()
         {

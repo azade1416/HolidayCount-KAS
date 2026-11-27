@@ -4,7 +4,7 @@ Business Esbjerg currently tracks employee leave through spreadsheets and email.
 
 ## Start here
 
-- Kyrylo drafts the [API contract](https://github.com/azade1416/HolidayCount-KAS/issues/4).
+- The backend API is documented by Swagger/OpenAPI when the service is running.
 - Azade builds the [employee screens](https://github.com/azade1416/HolidayCount-KAS/issues/8) and [accounting screens](https://github.com/azade1416/HolidayCount-KAS/issues/12).
 - Samuele defines the [role and ownership rules](https://github.com/azade1416/HolidayCount-KAS/issues/6).
 
@@ -12,9 +12,7 @@ Keep one issue in progress per person. Use GitHub’s Assignees field for owners
 
 ## Status and first milestone
 
-Backend development has started on a feature branch. The full leave workflow is still in development. For the first demo, an employee requests a day off, accounting approves it, and the employee sees one deduction from the correct balance. We’ll use synthetic data and verify that a pending request leaves the balance unchanged and that retrying an approval can’t deduct leave twice.
-
-The two leave accounts have separate earning and usage windows. Requests cover whole days, and the hours charged come from the employee’s schedule. The case’s standard schedule is 7.5 hours Monday through Thursday and 7 hours on Friday. Weekends and holidays are excluded. The first demo uses seeded balances so we can verify the workflow before adding accrual and rule administration.
+The application supports employee leave requests, accounting approval, balance tracking, cancellation requests, rule presets and public holidays. The API validates ownership, dates, schedules and balances; pending requests do not deduct hours.
 
 ## Team
 
@@ -31,14 +29,22 @@ Each owner writes tests for their area. The team reviews pull requests and runs 
 | Role | Planned access |
 | --- | --- |
 | Employee | Submit leave requests and see their own requests and balances. |
-| Accounting | Review pending requests, approve or reject them, and see employee balances. |
-| Administrator | Manage rule versions when the administration feature is added. |
+| Accountant | Review requests and employee balances. |
+| Administrator | Manage rule presets and effective-dated rules. |
 
-The API will enforce these permissions and check ownership for employee records. Passwords will use the authentication provider’s secure handling. Store deployment secrets in the hosting environment or GitHub Actions secrets.
+The API enforces these permissions and checks ownership. Passwords are stored as BCrypt hashes. Store deployment secrets in the hosting environment or GitHub Actions secrets.
+
+## Backend calculations
+
+Leave is charged in hours using the employee’s effective work schedule for each requested date. Weekends and configured public holidays are excluded; the API derives both working days and hours, so clients cannot choose the cost.
+
+Accrual is calculated monthly from the effective annual rule, converted to hours using the employee’s average scheduled workday length for that month, and rounded to two decimals. Repeated balance reads do not accrue the same month twice.
+
+Pending leave can use up to one scheduled workweek beyond the current combined balance. The projected combined balance must still be at least zero at the end of the earning period (31 August). The usage window runs through 31 December.
 
 ## Deployment
 
-- A clean database is seeded with three demo accounts. Configure credentials in `.env`; never commit passwords:
+- On an empty database, the API seeds three demo accounts. Configure credentials in `.env`; never commit passwords:
 
 ```env
 SEED_ADMIN_EMAIL=admin@businessesbjerg.com
@@ -49,15 +55,15 @@ SEED_EMPLOYEE_EMAIL=employee@businessesbjerg.com
 SEED_EMPLOYEE_PASSWORD=<password>
 ```
 
-The seed runs only when the `Users` table is empty.
+The seed runs only when the `Users` table is empty. Configure the database connection and JWT signing key through environment variables; never commit production credentials or connection strings.
 
 - Client URL pending.
 - API Swagger URL pending.
 - The client and API will deploy independently. The API will use a central relational database hosted in the cloud.
 
-## Testing strategy
+## Testing
 
-Start with unit tests for leave cost, account windows and effective rule dates. Use integration tests with a test database for authorization, server validation, repeat approval and concurrent approval. Run an end-to-end test that submits leave as an employee, approves it as accounting and checks the updated balance. GitHub Actions will run tests on pushes to main and pull requests targeting main. Record which tests were written before the code and which were added afterward.
+The test suite includes unit tests for calculations and integration tests against disposable PostgreSQL for API behavior, accrual, schema upgrades and balances. Test-first was used for focused changes such as rejecting client-supplied leave hours. Test-last was also used to add regression coverage after implementation, including schedule changes, accrual idempotency, projected debt limits and cancellation/approval edge cases. Run `dotnet test Backend.Tests\Backend.Tests.csproj` from the repository root.
 
 ## Project board and exam evidence
 

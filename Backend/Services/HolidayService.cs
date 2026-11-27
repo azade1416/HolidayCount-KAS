@@ -425,6 +425,8 @@ public class HolidayService : IHolidayService
             && x.RequestType == LeaveRequestType.Holiday);
         if (original == null)
             throw new KeyNotFoundException("Approved holiday not found.");
+        if (original.StartDate <= DateOnly.FromDateTime(DateTime.UtcNow))
+            throw new InvalidOperationException("A holiday cannot be cancelled after it has started.");
 
         var existing = await _db.LeaveRequests.AnyAsync(x =>
             x.UserId == userId
@@ -511,17 +513,26 @@ public class HolidayService : IHolidayService
 
     public async Task<LeaveRequest?> ApproveAsync(Guid requestId, Guid reviewerId)
     {
-        var request = await _db.LeaveRequests.FirstOrDefaultAsync(x => x.Id == requestId);
-        if (request == null || request.Status != LeaveRequestStatus.Pending)
+        await using var transaction = await _db.BeginTransactionAsync();
+        var reviewedAt = DateTime.UtcNow;
+        var claimed = await _db.LeaveRequests
+            .Where(x => x.Id == requestId && x.Status == LeaveRequestStatus.Pending)
+            .Set(x => x.Status, LeaveRequestStatus.Approved)
+            .Set(x => x.ReviewedAtUtc, reviewedAt)
+            .Set(x => x.ReviewedByUserId, reviewerId)
+            .UpdateAsync();
+        if (claimed == 0)
             return null;
 
-        await using var transaction = await _db.BeginTransactionAsync();
+        var request = await _db.LeaveRequests.FirstAsync(x => x.Id == requestId);
 
         if (request.RequestType == LeaveRequestType.Cancellation)
         {
             var original = await _db.LeaveRequests.FirstOrDefaultAsync(x => x.Id == request.OriginalRequestId);
             if (original == null)
                 throw new InvalidOperationException("Original holiday request not found.");
+            if (original.StartDate <= DateOnly.FromDateTime(DateTime.UtcNow))
+                throw new InvalidOperationException("A holiday cannot be cancelled after it has started.");
 
             original.Status = LeaveRequestStatus.Cancelled;
             original.ReviewedAtUtc = DateTime.UtcNow;
