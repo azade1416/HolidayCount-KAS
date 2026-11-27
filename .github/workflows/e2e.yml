@@ -1,0 +1,69 @@
+name: E2E
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Playwright end-to-end tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Throwaway test values for this CI run only, not real secrets.
+    env:
+      POSTGRES_PASSWORD: e2e-postgres-password
+      JWT_KEY: e2e-only-signing-key-at-least-32-bytes
+      SEED_ADMIN_EMAIL: admin@e2e.test
+      SEED_ADMIN_PASSWORD: E2e-admin-password-1
+      SEED_ACCOUNTANT_EMAIL: accountant@e2e.test
+      SEED_ACCOUNTANT_PASSWORD: E2e-accountant-password-1
+      SEED_EMPLOYEE_EMAIL: employee@e2e.test
+      SEED_EMPLOYEE_PASSWORD: E2e-employee-password-1
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Start database and API
+        run: docker compose -f docker-compose.yml -f e2e/docker-compose.e2e.yml up -d --build
+
+      - name: Wait for the API
+        # 401 means the API is up and asks for a login. On timeout, print its logs.
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5033/api/auth/me || true)
+            [ "$code" = "401" ] && exit 0
+            sleep 2
+          done
+          docker compose logs backend
+          exit 1
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install client dependencies
+        working-directory: Frontend
+        run: npm install --no-audit --no-fund
+
+      - name: Install Playwright
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        working-directory: e2e
+        run: npx playwright test
+
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report
