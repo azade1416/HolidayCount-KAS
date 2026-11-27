@@ -245,6 +245,12 @@ Request types are `Holiday` and `Cancellation`.
 
 Statuses are `Pending`, `Approved`, `Rejected`, `Cancelled`.
 
+Holiday requests must fall within the selected account's usage period. For
+new accounts, the earning period ends on 31 August and the usage period ends
+on 31 December. Pending requests reserve available hours across both accounts.
+The combined balance may go into debt by up to one scheduled workweek, but the
+projected combined balance must be non-negative on 31 August.
+
 ### `POST /leave-requests`
 
 Employee request:

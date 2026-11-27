@@ -34,7 +34,16 @@ public class AppDbContext : DataConnection
             ""EmploymentType"" integer NOT NULL, ""EmploymentStartDate"" date NOT NULL, ""EmploymentEndDate"" date NULL, ""IsActive"" boolean NOT NULL);");
         await this.ExecuteAsync(@"ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""Email"" varchar(320);");
         await this.ExecuteAsync(@"ALTER TABLE ""Users"" ALTER COLUMN ""Email"" SET NOT NULL;");
-        await this.ExecuteAsync(@"ALTER TABLE ""Users"" DROP COLUMN IF EXISTS ""Username"";");
+        await this.ExecuteAsync(@"
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'Users' AND column_name = 'Username'
+                ) THEN
+                    ALTER TABLE ""Users"" ALTER COLUMN ""Username"" SET DEFAULT gen_random_uuid()::text;
+                END IF;
+            END $$;");
         await this.ExecuteAsync(@"
             DO $$
             BEGIN
@@ -48,19 +57,16 @@ public class AppDbContext : DataConnection
         await this.ExecuteAsync(@"CREATE UNIQUE INDEX IF NOT EXISTS ""UX_Users_Email"" ON ""Users""(""Email"");");
         await this.ExecuteAsync(@"
             DO $$
-            DECLARE constraint_record record;
             BEGIN
-                FOR constraint_record IN
-                    SELECT conname
-                    FROM pg_constraint
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint
                     WHERE conrelid = '""Users""'::regclass
-                      AND contype = 'c'
-                LOOP
-                    EXECUTE format('ALTER TABLE ""Users"" DROP CONSTRAINT %I', constraint_record.conname);
-                END LOOP;
+                      AND conname = 'Users_Role_Check'
+                ) THEN
+                    ALTER TABLE ""Users"" ADD CONSTRAINT ""Users_Role_Check""
+                        CHECK (""Role"" IN ('employee','accountant','admin'));
+                END IF;
             END $$;");
-        await this.ExecuteAsync(@"ALTER TABLE ""Users"" ADD CONSTRAINT ""Users_Role_Check""
-            CHECK (""Role"" IN ('employee','accountant','admin'));");
         await this.ExecuteAsync(@"CREATE UNIQUE INDEX IF NOT EXISTS ""UX_Users_SingleAccountant""
             ON ""Users""(""Role"") WHERE ""Role"" = 'accountant';");
         await this.ExecuteAsync(@"CREATE UNIQUE INDEX IF NOT EXISTS ""UX_Users_SingleAdmin""
@@ -68,11 +74,20 @@ public class AppDbContext : DataConnection
 
         await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""WorkScheduleEntries"" (
             ""Id"" uuid PRIMARY KEY, ""UserId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
-            ""DayOfWeek"" integer NOT NULL, ""Hours"" numeric(6,2) NOT NULL, ""EffectiveFrom"" date NOT NULL, ""EffectiveTo"" date NULL,
+            ""DayOfWeek"" integer NOT NULL, ""EffectiveFrom"" date NOT NULL, ""EffectiveTo"" date NULL,
             UNIQUE (""UserId"", ""DayOfWeek"", ""EffectiveFrom""));");
         await this.ExecuteAsync(@"ALTER TABLE ""WorkScheduleEntries"" ADD COLUMN IF NOT EXISTS ""StartTime"" time NOT NULL DEFAULT '08:00';");
         await this.ExecuteAsync(@"ALTER TABLE ""WorkScheduleEntries"" ADD COLUMN IF NOT EXISTS ""EndTime"" time NOT NULL DEFAULT '16:00';");
-        await this.ExecuteAsync(@"ALTER TABLE ""WorkScheduleEntries"" DROP COLUMN IF EXISTS ""Hours"";");
+        await this.ExecuteAsync(@"
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'WorkScheduleEntries' AND column_name = 'Hours'
+                ) THEN
+                    ALTER TABLE ""WorkScheduleEntries"" ALTER COLUMN ""Hours"" SET DEFAULT 0;
+                END IF;
+            END $$;");
 
         await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""HolidayBalances"" (
             ""Id"" uuid PRIMARY KEY, ""UserId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
@@ -86,32 +101,22 @@ public class AppDbContext : DataConnection
         await this.ExecuteAsync(@"ALTER TABLE ""HolidayBalances"" ADD COLUMN IF NOT EXISTS ""TransferredHours"" numeric(10,2) NOT NULL DEFAULT 0;");
         await this.ExecuteAsync(@"
             DO $$
+            DECLARE legacy_column text;
             BEGIN
-                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'HolidayBalances' AND column_name = 'EarnedUnits') THEN
-                    ALTER TABLE ""HolidayBalances"" ALTER COLUMN ""EarnedUnits"" DROP NOT NULL;
-                END IF;
-                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'HolidayBalances' AND column_name = 'UsedUnits') THEN
-                    ALTER TABLE ""HolidayBalances"" ALTER COLUMN ""UsedUnits"" DROP NOT NULL;
-                END IF;
-                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'HolidayBalances' AND column_name = 'TransferredUnits') THEN
-                    ALTER TABLE ""HolidayBalances"" ALTER COLUMN ""TransferredUnits"" DROP NOT NULL;
-                END IF;
-                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'HolidayBalances' AND column_name = 'PaidOutUnits') THEN
-                    ALTER TABLE ""HolidayBalances"" ALTER COLUMN ""PaidOutUnits"" DROP NOT NULL;
-                END IF;
-                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'HolidayBalances' AND column_name = 'QualifyingSalary') THEN
-                    ALTER TABLE ""HolidayBalances"" ALTER COLUMN ""QualifyingSalary"" DROP NOT NULL;
-                END IF;
-                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'HolidayBalances' AND column_name = 'HolidaySupplementAmount') THEN
-                    ALTER TABLE ""HolidayBalances"" ALTER COLUMN ""HolidaySupplementAmount"" DROP NOT NULL;
-                END IF;
+                FOREACH legacy_column IN ARRAY ARRAY[
+                    'EarnedUnits', 'UsedUnits', 'TransferredUnits', 'PaidOutUnits',
+                    'QualifyingSalary', 'HolidaySupplementAmount'
+                ] LOOP
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'HolidayBalances' AND column_name = legacy_column
+                    ) THEN
+                        EXECUTE format(
+                            'ALTER TABLE ""HolidayBalances"" ALTER COLUMN %I SET DEFAULT 0',
+                            legacy_column);
+                    END IF;
+                END LOOP;
             END $$;");
-        await this.ExecuteAsync(@"ALTER TABLE ""HolidayBalances"" DROP COLUMN IF EXISTS ""EarnedUnits"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""HolidayBalances"" DROP COLUMN IF EXISTS ""UsedUnits"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""HolidayBalances"" DROP COLUMN IF EXISTS ""TransferredUnits"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""HolidayBalances"" DROP COLUMN IF EXISTS ""PaidOutUnits"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""HolidayBalances"" DROP COLUMN IF EXISTS ""QualifyingSalary"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""HolidayBalances"" DROP COLUMN IF EXISTS ""HolidaySupplementAmount"";");
 
         await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""MonthlyAccruals"" (
             ""Id"" uuid PRIMARY KEY, ""HolidayBalanceId"" uuid NOT NULL REFERENCES ""HolidayBalances""(""Id"") ON DELETE CASCADE,
@@ -125,17 +130,19 @@ public class AppDbContext : DataConnection
         await this.ExecuteAsync(@"ALTER TABLE ""MonthlyAccruals"" ADD COLUMN IF NOT EXISTS ""AverageDayHours"" numeric(8,2) NOT NULL DEFAULT 0;");
         await this.ExecuteAsync(@"
             DO $$
+            DECLARE legacy_column text;
             BEGIN
-                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'MonthlyAccruals' AND column_name = 'EarnedDays') THEN
-                    ALTER TABLE ""MonthlyAccruals"" ALTER COLUMN ""EarnedDays"" DROP NOT NULL;
-                END IF;
-                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'MonthlyAccruals' AND column_name = 'QualifyingSalary') THEN
-                    ALTER TABLE ""MonthlyAccruals"" ALTER COLUMN ""QualifyingSalary"" DROP NOT NULL;
-                END IF;
+                FOREACH legacy_column IN ARRAY ARRAY['EarnedDays', 'QualifyingSalary'] LOOP
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'MonthlyAccruals' AND column_name = legacy_column
+                    ) THEN
+                        EXECUTE format(
+                            'ALTER TABLE ""MonthlyAccruals"" ALTER COLUMN %I SET DEFAULT 0',
+                            legacy_column);
+                    END IF;
+                END LOOP;
             END $$;");
-        await this.ExecuteAsync(@"ALTER TABLE ""MonthlyAccruals"" DROP COLUMN IF EXISTS ""EarnedDays"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""MonthlyAccruals"" DROP COLUMN IF EXISTS ""QualifyingSalary"";");
-        await this.ExecuteAsync(@"DROP TABLE IF EXISTS ""SalaryHistory"";");
 
         await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""LeaveRequests"" (
             ""Id"" uuid PRIMARY KEY, ""UserId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
@@ -150,6 +157,9 @@ public class AppDbContext : DataConnection
             ""Id"" uuid PRIMARY KEY, ""HolidayBalanceId"" uuid NOT NULL REFERENCES ""HolidayBalances""(""Id"") ON DELETE CASCADE,
             ""TransactionType"" integer NOT NULL, ""TransactionDate"" date NOT NULL, ""Units"" numeric(10,2) NOT NULL,
             ""LeaveRequestId"" uuid NULL REFERENCES ""LeaveRequests""(""Id"") ON DELETE SET NULL, ""Notes"" text NULL);");
+        await this.ExecuteAsync(@"CREATE UNIQUE INDEX IF NOT EXISTS ""UX_HolidayTransactions_Usage_LeaveRequestId""
+            ON ""HolidayTransactions"" (""LeaveRequestId"")
+            WHERE ""TransactionType"" = 1 AND ""LeaveRequestId"" IS NOT NULL;");
 
         await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""SystemParameters"" (
             ""Id"" uuid PRIMARY KEY, ""Key"" varchar(100) NOT NULL, ""Value"" text NOT NULL,
@@ -162,22 +172,25 @@ public class AppDbContext : DataConnection
                     SELECT 1 FROM information_schema.columns
                     WHERE table_name = 'SystemParameters' AND column_name = 'NumericValue'
                 ) THEN
-                    EXECUTE 'DELETE FROM ""SystemParameters"" old_row USING ""SystemParameters"" new_row
+                    EXECUTE 'UPDATE ""SystemParameters"" old_row
+                        SET ""Value"" = to_jsonb(old_row.""NumericValue"" * 7.4 * 12)::text
+                        WHERE old_row.""Key"" IN (''weeks1To5DaysPerMonth'', ''week6DaysPerMonth'')
+                          AND old_row.""NumericValue"" IS NOT NULL
+                          AND old_row.""Value"" IS NULL';
+                    EXECUTE 'UPDATE ""SystemParameters"" old_row
+                        SET ""Key"" = ''weeks1To5HoursPerYear''
                         WHERE old_row.""Key"" = ''weeks1To5DaysPerMonth''
-                          AND new_row.""Key"" = ''weeks1To5HoursPerYear''
-                          AND old_row.""EffectiveFrom"" = new_row.""EffectiveFrom""';
-                    EXECUTE 'DELETE FROM ""SystemParameters"" old_row USING ""SystemParameters"" new_row
+                          AND NOT EXISTS (
+                              SELECT 1 FROM ""SystemParameters"" new_row
+                              WHERE new_row.""Key"" = ''weeks1To5HoursPerYear''
+                                AND new_row.""EffectiveFrom"" = old_row.""EffectiveFrom"")';
+                    EXECUTE 'UPDATE ""SystemParameters"" old_row
+                        SET ""Key"" = ''week6HoursPerYear''
                         WHERE old_row.""Key"" = ''week6DaysPerMonth''
-                          AND new_row.""Key"" = ''week6HoursPerYear''
-                          AND old_row.""EffectiveFrom"" = new_row.""EffectiveFrom""';
-                    EXECUTE 'UPDATE ""SystemParameters""
-                        SET ""NumericValue"" = ""NumericValue"" * 7.4 * 12,
-                            ""Key"" = ''weeks1To5HoursPerYear''
-                        WHERE ""Key"" = ''weeks1To5DaysPerMonth''';
-                    EXECUTE 'UPDATE ""SystemParameters""
-                        SET ""NumericValue"" = ""NumericValue"" * 7.4 * 12,
-                            ""Key"" = ''week6HoursPerYear''
-                        WHERE ""Key"" = ''week6DaysPerMonth''';
+                          AND NOT EXISTS (
+                              SELECT 1 FROM ""SystemParameters"" new_row
+                              WHERE new_row.""Key"" = ''week6HoursPerYear''
+                                AND new_row.""EffectiveFrom"" = old_row.""EffectiveFrom"")';
                     EXECUTE 'UPDATE ""SystemParameters""
                         SET ""Value"" = COALESCE(
                             to_jsonb(""NumericValue"")::text,
@@ -189,12 +202,6 @@ public class AppDbContext : DataConnection
                 UPDATE ""SystemParameters"" SET ""Value"" = 'null' WHERE ""Value"" IS NULL;
             END $$;");
         await this.ExecuteAsync(@"ALTER TABLE ""SystemParameters"" ALTER COLUMN ""Value"" SET NOT NULL;");
-        await this.ExecuteAsync(@"ALTER TABLE ""SystemParameters"" DROP CONSTRAINT IF EXISTS ""SystemParameters_Key_EffectiveFrom_key"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""SystemParameters"" DROP COLUMN IF EXISTS ""NumericValue"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""SystemParameters"" DROP COLUMN IF EXISTS ""TextValue"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""SystemParameters"" DROP COLUMN IF EXISTS ""BooleanValue"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""SystemParameters"" DROP COLUMN IF EXISTS ""EffectiveTo"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""SystemParameters"" DROP COLUMN IF EXISTS ""Description"";");
         await this.ExecuteAsync(@"CREATE UNIQUE INDEX IF NOT EXISTS ""UX_SystemParameters_Key_EffectiveFrom""
             ON ""SystemParameters"" (""Key"", ""EffectiveFrom"");");
 
@@ -227,22 +234,42 @@ public class AppDbContext : DataConnection
                 )::text
             )
             WHERE ""Settings"" = '{}';");
-        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" DROP COLUMN IF EXISTS ""Code"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" DROP COLUMN IF EXISTS ""SettingsJson"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" DROP COLUMN IF EXISTS ""Version"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" DROP COLUMN IF EXISTS ""PreviousVersionId"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" DROP COLUMN IF EXISTS ""Weeks1To5HoursPerYear"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" DROP COLUMN IF EXISTS ""Week6HoursPerYear"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" DROP COLUMN IF EXISTS ""MainHolidayNoticeMonths"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" DROP COLUMN IF EXISTS ""OtherHolidayNoticeMonths"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" DROP COLUMN IF EXISTS ""AccrualRatePerMonth"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" DROP COLUMN IF EXISTS ""Weeks1To5Enabled"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" DROP COLUMN IF EXISTS ""Week6Enabled"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" DROP COLUMN IF EXISTS ""EffectiveFrom"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" DROP COLUMN IF EXISTS ""EffectiveTo"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" DROP COLUMN IF EXISTS ""IsActive"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" DROP COLUMN IF EXISTS ""CreatedAtUtc"";");
-        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" DROP COLUMN IF EXISTS ""CreatedByUserId"";");
+        await this.ExecuteAsync(@"
+            DO $$
+            DECLARE legacy_column text;
+            legacy_columns text[] := ARRAY[
+                'Code', 'SettingsJson', 'Version', 'Weeks1To5HoursPerYear',
+                'Week6HoursPerYear', 'MainHolidayNoticeMonths', 'OtherHolidayNoticeMonths',
+                'AccrualRatePerMonth', 'Weeks1To5Enabled', 'Week6Enabled',
+                'EffectiveFrom', 'IsActive', 'CreatedAtUtc'
+            ];
+            BEGIN
+                FOREACH legacy_column IN ARRAY legacy_columns LOOP
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'RulePresets' AND column_name = legacy_column
+                    ) THEN
+                        EXECUTE format(
+                            'ALTER TABLE ""RulePresets"" ALTER COLUMN %I SET DEFAULT %s',
+                            legacy_column,
+                            CASE legacy_column
+                                WHEN 'Code' THEN 'gen_random_uuid()::text'
+                                WHEN 'SettingsJson' THEN '''{}'''
+                                WHEN 'Version' THEN '1'
+                                WHEN 'Weeks1To5HoursPerYear' THEN '185'
+                                WHEN 'Week6HoursPerYear' THEN '37'
+                                WHEN 'MainHolidayNoticeMonths' THEN '3'
+                                WHEN 'OtherHolidayNoticeMonths' THEN '1'
+                                WHEN 'AccrualRatePerMonth' THEN '0'
+                                WHEN 'Weeks1To5Enabled' THEN 'true'
+                                WHEN 'Week6Enabled' THEN 'true'
+                                WHEN 'EffectiveFrom' THEN '''2000-01-01'''
+                                WHEN 'IsActive' THEN 'true'
+                                WHEN 'CreatedAtUtc' THEN 'now()'
+                            END);
+                    END IF;
+                END LOOP;
+            END $$;");
         await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""ScheduleChanges"" (
             ""Id"" uuid PRIMARY KEY, ""UserId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
             ""EffectiveFrom"" date NOT NULL, ""PreviousScheduleJson"" text NULL, ""NewScheduleJson"" text NOT NULL,
@@ -307,7 +334,7 @@ public class AppDbContext : DataConnection
                 EarningPeriodStart = new DateOnly(today.Year, 9, 1),
                 EarningPeriodEnd = new DateOnly(today.Year + 1, 8, 31),
                 UsagePeriodStart = new DateOnly(today.Year, 9, 1),
-                UsagePeriodEnd = new DateOnly(today.Year + 1, 8, 31)
+                UsagePeriodEnd = new DateOnly(today.Year + 1, 12, 31)
             });
         }
     }
