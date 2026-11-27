@@ -2,7 +2,7 @@ import type { Employee, WeeklySchedule, ScheduleChange, MockHolidayAccount, Mock
 import type { SystemRole, PublicUser, CreateEmployeeData, Announcement } from "./admin";
 import type { AccountantRequest } from "./accountant";
 
-import { Api, type CreateUserDto } from "./generated/client";
+import { Api, type CreateUserDto, type CreateRulePresetDto, type SaveHolidayRulesDto } from "./generated/client";
 
 const TOKEN_KEY = "holidaycount_token";
 
@@ -11,6 +11,7 @@ type ApiRequest = {
     id: string; userId: string; accountType: number | string; requestType: number | string;
     originalRequestId?: string | null; startDate: string; endDate: string;
     status: number | string; submittedAtUtc: string; reviewedAtUtc?: string | null;
+    requestedHours?: number;
 };
 
 function roleName(role: string): SystemRole {
@@ -44,6 +45,18 @@ async function responseData<T>(request: Promise<Response>, parseJson = true): Pr
         throw new Error(body?.message ?? body?.title ?? `Request failed (${error.status}).`);
     }
 }
+
+type PresetSettings = Required<NonNullable<CreateRulePresetDto["settings"]>>;
+export type RulePreset = { id: string; name: string; settings: PresetSettings };
+export type SystemParameter = { key: string; value: unknown; effectiveFrom: string };
+
+export const getRulePresets = () => responseData<RulePreset[]>(api.rulePresetsList());
+
+export const createRulePreset = (data: CreateRulePresetDto) => responseData<RulePreset>(api.rulePresetsCreate(data));
+
+export const getSystemParameters = () => responseData<SystemParameter[]>(api.systemParametersList());
+
+export const saveSystemParameters = (data: SaveHolidayRulesDto) => responseData<SystemParameter[]>(api.systemParametersCreate(data));
 
 const toPublicUser = (user: ApiUser): PublicUser => ({
     id: user.id, name: user.name ?? user.fullName ?? "", email: user.email,
@@ -166,6 +179,17 @@ export async function getHolidayAccounts(employeeId: string): Promise<MockHolida
     return responseData<MockHolidayAccount[]>(api.employeesHolidayAccountsList(employeeId));
 }
 
+export type FutureBalance = { id: string; name: string; remainingHours: number };
+
+export function getFutureBalance(date: string) {
+    return responseData<FutureBalance[]>(api.holidayAccountsFutureBalanceList({ date }));
+}
+
+export async function createTransferRequest(accountId: string, hours: number, writtenAgreement: boolean) {
+    const request = await responseData<ApiRequest>(api.leaveRequestsTransferCreate({ accountId, hours, writtenAgreement }));
+    return toMockRequest(request);
+}
+
 export async function createHolidayRequest(accountId: string, startDate: string, endDate: string): Promise<void> {
     await responseData<void>(api.leaveRequestsCreate({ accountId, startDate, endDate, requestedDays: 1, requestedHours: 0 }), false);
 }
@@ -190,6 +214,7 @@ export async function getRequests(): Promise<AccountantRequest[]> {
     return requests.map(item => ({
         id: item.id, employee: names.get(item.userId) ?? "Employee",
         dates: `${item.startDate} – ${item.endDate}`,
+        requestedHours: item.requestedHours,
         status: enumName(item.status, ["Pending", "Approved", "Rejected", "Cancelled"]),
         submittedDate: item.submittedAtUtc.slice(0, 10),
         type: enumName(item.requestType, ["Holiday", "Cancellation", "Transfer"]) as AccountantRequest["type"]
@@ -216,3 +241,13 @@ export async function sendAnnouncement(message: string): Promise<void> {
 export async function getAnnouncements(): Promise<Announcement[]> {
     return responseData<Announcement[]>(api.announcementsList());
 }
+
+export type PublicHoliday = { id: string; name: string; date: string; isCompanySpecific: boolean };
+
+export const getPublicHolidays = () => responseData<PublicHoliday[]>(api.publicHolidaysList());
+
+export function savePublicHoliday({ id, ...holiday }: PublicHoliday) {
+    return responseData<PublicHoliday>(id ? api.publicHolidaysUpdate(id, holiday) : api.publicHolidaysCreate(holiday));
+}
+
+export const deletePublicHoliday = (id: string) => responseData<void>(api.publicHolidaysDelete(id), false);

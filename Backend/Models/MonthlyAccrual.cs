@@ -14,6 +14,10 @@ public class MonthlyAccrual
     public DateOnly AccrualMonth { get; set; }
     [Column("EarnedHours")]
     public decimal EarnedHours { get; set; }
+    [Column("AccrualRatePerMonth")]
+    public decimal AccrualRatePerMonth { get; set; }
+    [Column("AverageDayHours")]
+    public decimal AverageDayHours { get; set; }
     [Column("CreatedAtUtc")]
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
