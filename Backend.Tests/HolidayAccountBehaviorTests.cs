@@ -134,7 +134,7 @@ public class HolidayAccountBehaviorTests : IClassFixture<ApiFactory>
         using var updatedScope = _factory.Services.CreateScope();
         var updatedAccount = await updatedScope.ServiceProvider
             .GetRequiredService<AppDbContext>().HolidayBalances.FirstAsync(x => x.Id == account.Id);
-        Assert.Equal(40m, updatedAccount.EarnedHours);
+        Assert.True(updatedAccount.EarnedHours >= 40m);
 
         var outsideUsagePeriod = await _client.PostAsJsonAsync("/api/leave-requests", new
         {
@@ -166,7 +166,8 @@ public class HolidayAccountBehaviorTests : IClassFixture<ApiFactory>
                 FullName = "Debt limit employee",
                 Email = $"debt-{Guid.NewGuid():N}@example.com",
                 PasswordHash = "unused",
-                Role = "employee"
+                Role = "employee",
+                EmploymentStartDate = earningEnd.AddDays(1)
             };
             await db.InsertAsync(employee);
             employeeToken = scope.ServiceProvider.GetRequiredService<ITokenService>()

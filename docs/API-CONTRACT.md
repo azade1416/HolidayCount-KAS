@@ -233,10 +233,11 @@ any employee.
 Balances use server-calculated hours with two decimals. Money fields must not
 be stored or returned by this system.
 
-### `GET /holiday-accounts/future-balance?date=YYYY-MM-DD` — **Planned**
+### `GET /holiday-accounts/future-balance?date=YYYY-MM-DD`
 
-Returns an employee's calculated balances on the future date. Until
-implemented, the frontend button remains disabled.
+Returns the current user's projected balance for each account, including
+monthly accrual through the requested date. Only approved leave reduces the
+projected balance; pending requests do not.
 
 ## Leave and cancellation requests
 
@@ -246,9 +247,9 @@ Statuses are `Pending`, `Approved`, `Rejected`, `Cancelled`.
 
 Holiday requests must fall within the selected account's usage period. For
 new accounts, the earning period ends on 31 August and the usage period ends
-on 31 December. Pending requests reserve available hours across both accounts;
-until future accrual projection is implemented, a request is rejected if it
-would make the stored combined balance negative.
+on 31 December. Pending requests reserve available hours across both accounts.
+The combined balance may go into debt by up to one scheduled workweek, but the
+projected combined balance must be non-negative on 31 August.
 
 ### `POST /leave-requests`
 
@@ -447,25 +448,72 @@ Public holidays can be created and edited only by `admin`.
 }
 ```
 
-## Planned rule configuration
+## Rule presets and system parameters
 
-The assignment's presets/rule administration are not required for the current
-mock frontend.
+These endpoints require `admin`. Presets store their settings as one JSON
+object. System parameters store a JSON scalar value and an effective date;
+the database enforces uniqueness for each key and effective date. Saving an
+effective-dated rule set also stores a named preset and does not rewrite
+existing monthly accrual records.
 
-- `GET /rule-presets`
-- `GET /rule-presets/{id}`
-- `POST /rule-sets`
-- `GET /rule-sets`
-- `GET /rule-sets/{id}`
-- `PUT /rule-sets/{id}`
-- `POST /rule-sets/{id}/activate`
+### `GET /rule-presets`
 
-Rule changes must be effective-dated and must not rewrite historical
-calculations.
+Returns saved presets:
 
-## Planned final settlement
+```json
+[
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "name": "Business Esbjerg defaults",
+    "settings": {
+      "weeks1To5HoursPerYear": 185,
+      "week6HoursPerYear": 37,
+      "mainHolidayNoticeMonths": 3,
+      "otherHolidayNoticeMonths": 1
+    }
+  }
+]
+```
 
-`POST /balances/{id}/final-settlement` closes an employee balance when
-employment ends, records a payout and prevents duplicate payout. The request
-contains `settlementDate`, `reason` and `paymentMethod` (`direct` or
-`feriepengeinfo`). A repeated settlement returns `409`.
+### `GET /rule-presets/{id}`
+
+Returns one named preset.
+
+### `POST /rule-presets`
+
+Request: `{ "name": "Preset name", "settings": { ... } }` using the settings
+object shown above. Each request creates a preset record with its own GUID.
+Invalid values return `400`.
+
+### `GET /system-parameters`
+
+Returns effective-dated history as `{ "key", "value", "effectiveFrom" }`
+records. `value` retains its JSON scalar type, such as a number or boolean.
+
+### `POST /system-parameters`
+
+Request:
+
+```json
+{
+  "effectiveFrom": "2027-01-01",
+  "name": "Business Esbjerg defaults",
+  "settings": {
+    "weeks1To5HoursPerYear": 185,
+    "week6HoursPerYear": 37,
+    "mainHolidayNoticeMonths": 3,
+    "otherHolidayNoticeMonths": 1
+  }
+}
+```
+
+The effective date must be in the future. Duplicate effective dates return
+`409`. Initial defaults are 185 full-time hours/year for weeks 1–5 and 37
+hours/year for week 6. These correspond approximately to 2.08 and 0.42 days
+per month using a 7.4-hour standard full-time day. Accrual is converted to
+hours using the employee's effective schedule. Monthly accruals store the
+applied rate and schedule day length, so later rule or schedule changes do not
+rewrite recorded history.
+
+Pending holiday requests reserve debt capacity. The maximum debt is one
+effective scheduled workweek combined across both holiday accounts.

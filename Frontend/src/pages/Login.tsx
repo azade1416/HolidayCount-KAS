@@ -4,6 +4,7 @@ import { login } from "../holidayApi";
 
 function Login() {
     const [form, setForm] = useState({ email: "", password: "" });
+    const [message, setMessage] = useState("");
     const navigate = useNavigate();
 
     const handleChange = (e: ChangeEvent<HTMLInputElement>) =>
@@ -11,13 +12,14 @@ function Login() {
 
     const handleLogin = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+        setMessage("");
         try {
             const user = await login(form.email, form.password);
-            if (!user) return alert("Invalid email or password.");
+            if (!user) return setMessage("Invalid email or password.");
             navigate(`/${user.role.toLowerCase()}`);
         } catch (error) {
             console.error("Login error:", error);
-            alert("Something went wrong. Please try again.");
+            setMessage("Something went wrong. Please try again.");
         }
     };
 
@@ -33,6 +35,7 @@ function Login() {
             <input name="password" type="password" placeholder="Password"
                    value={form.password} onChange={handleChange} />
 
+            {message && <p className="login-error" role="alert">{message}</p>}
             <button type="submit">Enter dashboard</button>
         </form>
     );

@@ -36,7 +36,7 @@ export type Weekday =
     | "Thursday"
     | "Friday";
 
-export type RequestType = "Holiday" | "Cancellation";
+export type RequestType = "Holiday" | "Cancellation" | "Transfer";
 
 export interface DailySchedule {
     from: string;

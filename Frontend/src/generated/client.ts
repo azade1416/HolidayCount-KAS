@@ -47,6 +47,11 @@ export interface CreateLeaveRequestDto {
   endDate: string;
 }
 
+export interface CreateRulePresetDto {
+  name?: string | null;
+  settings?: HolidayRuleSettingsDto;
+}
+
 export interface CreateTransferDto {
   /** @format uuid */
   accountId: string;
@@ -89,6 +94,17 @@ export interface DailyScheduleDto {
   to: string;
 }
 
+export interface HolidayRuleSettingsDto {
+  /** @format double */
+  weeks1To5HoursPerYear?: number;
+  /** @format double */
+  week6HoursPerYear?: number;
+  /** @format double */
+  mainHolidayNoticeMonths?: number;
+  /** @format double */
+  otherHolidayNoticeMonths?: number;
+}
+
 export interface LoginDto {
   email?: string | null;
   password?: string | null;
@@ -105,6 +121,13 @@ export interface PublicHoliday {
 
 export interface RejectLeaveRequestDto {
   reason?: string | null;
+}
+
+export interface SaveHolidayRulesDto {
+  /** @format date */
+  effectiveFrom?: string;
+  settings?: HolidayRuleSettingsDto;
+  name?: string | null;
 }
 
 export interface UpdateUserDto {
@@ -1089,6 +1112,96 @@ export class Api<
         path: `/api/public-holidays/${id}`,
         method: "DELETE",
         secure: true,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags RulePresets
+     * @name RulePresetsList
+     * @request GET:/api/rule-presets
+     * @secure
+     */
+    rulePresetsList: (params: RequestParams = {}) =>
+      this.request<void, any>({
+        path: `/api/rule-presets`,
+        method: "GET",
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags RulePresets
+     * @name RulePresetsCreate
+     * @request POST:/api/rule-presets
+     * @secure
+     */
+    rulePresetsCreate: (
+      data: CreateRulePresetDto,
+      params: RequestParams = {},
+    ) =>
+      this.request<void, any>({
+        path: `/api/rule-presets`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags RulePresets
+     * @name RulePresetsDetail
+     * @request GET:/api/rule-presets/{id}
+     * @secure
+     */
+    rulePresetsDetail: (id: string, params: RequestParams = {}) =>
+      this.request<void, any>({
+        path: `/api/rule-presets/${id}`,
+        method: "GET",
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags SystemParameters
+     * @name SystemParametersList
+     * @request GET:/api/system-parameters
+     * @secure
+     */
+    systemParametersList: (params: RequestParams = {}) =>
+      this.request<void, any>({
+        path: `/api/system-parameters`,
+        method: "GET",
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags SystemParameters
+     * @name SystemParametersCreate
+     * @request POST:/api/system-parameters
+     * @secure
+     */
+    systemParametersCreate: (
+      data: SaveHolidayRulesDto,
+      params: RequestParams = {},
+    ) =>
+      this.request<void, any>({
+        path: `/api/system-parameters`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
         ...params,
       }),
   };

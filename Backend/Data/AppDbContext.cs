@@ -1,4 +1,6 @@
 using Backend.Models;
+using Backend.DTOs;
+using System.Text.Json;
 using LinqToDB;
 using LinqToDB.Async;
 using LinqToDB.Data;
@@ -119,9 +121,13 @@ public class AppDbContext : DataConnection
         await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""MonthlyAccruals"" (
             ""Id"" uuid PRIMARY KEY, ""HolidayBalanceId"" uuid NOT NULL REFERENCES ""HolidayBalances""(""Id"") ON DELETE CASCADE,
             ""AccrualMonth"" date NOT NULL, ""EarnedHours"" numeric(10,2) NOT NULL,
+            ""AccrualRatePerMonth"" numeric(8,4) NOT NULL DEFAULT 0,
+            ""AverageDayHours"" numeric(8,2) NOT NULL DEFAULT 0,
             ""CreatedAtUtc"" timestamp with time zone NOT NULL,
             UNIQUE (""HolidayBalanceId"", ""AccrualMonth""));");
         await this.ExecuteAsync(@"ALTER TABLE ""MonthlyAccruals"" ADD COLUMN IF NOT EXISTS ""EarnedHours"" numeric(10,2) NOT NULL DEFAULT 0;");
+        await this.ExecuteAsync(@"ALTER TABLE ""MonthlyAccruals"" ADD COLUMN IF NOT EXISTS ""AccrualRatePerMonth"" numeric(8,4) NOT NULL DEFAULT 0;");
+        await this.ExecuteAsync(@"ALTER TABLE ""MonthlyAccruals"" ADD COLUMN IF NOT EXISTS ""AverageDayHours"" numeric(8,2) NOT NULL DEFAULT 0;");
         await this.ExecuteAsync(@"
             DO $$
             DECLARE legacy_column text;
@@ -156,9 +162,48 @@ public class AppDbContext : DataConnection
             WHERE ""TransactionType"" = 1 AND ""LeaveRequestId"" IS NOT NULL;");
 
         await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""SystemParameters"" (
-            ""Id"" uuid PRIMARY KEY, ""Key"" varchar(100) NOT NULL, ""NumericValue"" numeric(14,4) NULL,
-            ""TextValue"" text NULL, ""BooleanValue"" boolean NULL, ""EffectiveFrom"" date NOT NULL, ""EffectiveTo"" date NULL,
-            ""Description"" text NULL, UNIQUE (""Key"", ""EffectiveFrom""));");
+            ""Id"" uuid PRIMARY KEY, ""Key"" varchar(100) NOT NULL, ""Value"" text NOT NULL,
+            ""EffectiveFrom"" date NOT NULL);");
+        await this.ExecuteAsync(@"ALTER TABLE ""SystemParameters"" ADD COLUMN IF NOT EXISTS ""Value"" text;");
+        await this.ExecuteAsync(@"
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'SystemParameters' AND column_name = 'NumericValue'
+                ) THEN
+                    EXECUTE 'UPDATE ""SystemParameters"" old_row
+                        SET ""Value"" = to_jsonb(old_row.""NumericValue"" * 7.4 * 12)::text
+                        WHERE old_row.""Key"" IN (''weeks1To5DaysPerMonth'', ''week6DaysPerMonth'')
+                          AND old_row.""NumericValue"" IS NOT NULL
+                          AND old_row.""Value"" IS NULL';
+                    EXECUTE 'UPDATE ""SystemParameters"" old_row
+                        SET ""Key"" = ''weeks1To5HoursPerYear''
+                        WHERE old_row.""Key"" = ''weeks1To5DaysPerMonth''
+                          AND NOT EXISTS (
+                              SELECT 1 FROM ""SystemParameters"" new_row
+                              WHERE new_row.""Key"" = ''weeks1To5HoursPerYear''
+                                AND new_row.""EffectiveFrom"" = old_row.""EffectiveFrom"")';
+                    EXECUTE 'UPDATE ""SystemParameters"" old_row
+                        SET ""Key"" = ''week6HoursPerYear''
+                        WHERE old_row.""Key"" = ''week6DaysPerMonth''
+                          AND NOT EXISTS (
+                              SELECT 1 FROM ""SystemParameters"" new_row
+                              WHERE new_row.""Key"" = ''week6HoursPerYear''
+                                AND new_row.""EffectiveFrom"" = old_row.""EffectiveFrom"")';
+                    EXECUTE 'UPDATE ""SystemParameters""
+                        SET ""Value"" = COALESCE(
+                            to_jsonb(""NumericValue"")::text,
+                            to_jsonb(""TextValue"")::text,
+                            to_jsonb(""BooleanValue"")::text,
+                            ''null'')
+                        WHERE ""Value"" IS NULL';
+                END IF;
+                UPDATE ""SystemParameters"" SET ""Value"" = 'null' WHERE ""Value"" IS NULL;
+            END $$;");
+        await this.ExecuteAsync(@"ALTER TABLE ""SystemParameters"" ALTER COLUMN ""Value"" SET NOT NULL;");
+        await this.ExecuteAsync(@"CREATE UNIQUE INDEX IF NOT EXISTS ""UX_SystemParameters_Key_EffectiveFrom""
+            ON ""SystemParameters"" (""Key"", ""EffectiveFrom"");");
 
         await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""PublicHolidays"" (
             ""Id"" uuid PRIMARY KEY, ""Date"" date NOT NULL UNIQUE, ""Name"" varchar(200) NOT NULL, ""IsCompanySpecific"" boolean NOT NULL);");
@@ -168,11 +213,63 @@ public class AppDbContext : DataConnection
             ""CreatedByUserId"" uuid NULL REFERENCES ""Users""(""Id"") ON DELETE SET NULL);");
 
         await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""RulePresets"" (
-            ""Id"" uuid PRIMARY KEY, ""Code"" varchar(100) NOT NULL UNIQUE, ""Name"" varchar(200) NOT NULL,
-            ""AccrualRatePerMonth"" numeric(8,4) NOT NULL, ""Weeks1To5Enabled"" boolean NOT NULL,
-            ""Week6Enabled"" boolean NOT NULL, ""EffectiveFrom"" date NOT NULL, ""EffectiveTo"" date NULL,
-            ""IsActive"" boolean NOT NULL, ""CreatedAtUtc"" timestamp with time zone NOT NULL,
-            ""CreatedByUserId"" uuid NULL REFERENCES ""Users""(""Id"") ON DELETE SET NULL);");
+            ""Id"" uuid PRIMARY KEY, ""Name"" varchar(200) NOT NULL, ""Settings"" text NOT NULL DEFAULT '{}');");
+        await this.ExecuteAsync(@"ALTER TABLE ""RulePresets"" ADD COLUMN IF NOT EXISTS ""Settings"" text NOT NULL DEFAULT '{}';");
+        await this.ExecuteAsync(@"
+            UPDATE ""RulePresets""
+            SET ""Settings"" = COALESCE(
+                NULLIF(to_jsonb(""RulePresets"")->>'SettingsJson', '{}'),
+                json_build_object(
+                    'weeks1To5HoursPerYear',
+                        COALESCE(
+                            (to_jsonb(""RulePresets"")->>'Weeks1To5HoursPerYear')::numeric,
+                            (to_jsonb(""RulePresets"")->>'AccrualRatePerMonth')::numeric * 7.4 * 12,
+                            185),
+                    'week6HoursPerYear',
+                        COALESCE((to_jsonb(""RulePresets"")->>'Week6HoursPerYear')::numeric, 37),
+                    'mainHolidayNoticeMonths',
+                        COALESCE((to_jsonb(""RulePresets"")->>'MainHolidayNoticeMonths')::numeric, 3),
+                    'otherHolidayNoticeMonths',
+                        COALESCE((to_jsonb(""RulePresets"")->>'OtherHolidayNoticeMonths')::numeric, 1)
+                )::text
+            )
+            WHERE ""Settings"" = '{}';");
+        await this.ExecuteAsync(@"
+            DO $$
+            DECLARE legacy_column text;
+            legacy_columns text[] := ARRAY[
+                'Code', 'SettingsJson', 'Version', 'Weeks1To5HoursPerYear',
+                'Week6HoursPerYear', 'MainHolidayNoticeMonths', 'OtherHolidayNoticeMonths',
+                'AccrualRatePerMonth', 'Weeks1To5Enabled', 'Week6Enabled',
+                'EffectiveFrom', 'IsActive', 'CreatedAtUtc'
+            ];
+            BEGIN
+                FOREACH legacy_column IN ARRAY legacy_columns LOOP
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'RulePresets' AND column_name = legacy_column
+                    ) THEN
+                        EXECUTE format(
+                            'ALTER TABLE ""RulePresets"" ALTER COLUMN %I SET DEFAULT %s',
+                            legacy_column,
+                            CASE legacy_column
+                                WHEN 'Code' THEN 'gen_random_uuid()::text'
+                                WHEN 'SettingsJson' THEN '''{}'''
+                                WHEN 'Version' THEN '1'
+                                WHEN 'Weeks1To5HoursPerYear' THEN '185'
+                                WHEN 'Week6HoursPerYear' THEN '37'
+                                WHEN 'MainHolidayNoticeMonths' THEN '3'
+                                WHEN 'OtherHolidayNoticeMonths' THEN '1'
+                                WHEN 'AccrualRatePerMonth' THEN '0'
+                                WHEN 'Weeks1To5Enabled' THEN 'true'
+                                WHEN 'Week6Enabled' THEN 'true'
+                                WHEN 'EffectiveFrom' THEN '''2000-01-01'''
+                                WHEN 'IsActive' THEN 'true'
+                                WHEN 'CreatedAtUtc' THEN 'now()'
+                            END);
+                    END IF;
+                END LOOP;
+            END $$;");
         await this.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS ""ScheduleChanges"" (
             ""Id"" uuid PRIMARY KEY, ""UserId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
             ""EffectiveFrom"" date NOT NULL, ""PreviousScheduleJson"" text NULL, ""NewScheduleJson"" text NOT NULL,
@@ -238,6 +335,42 @@ public class AppDbContext : DataConnection
                 EarningPeriodEnd = new DateOnly(today.Year + 1, 8, 31),
                 UsagePeriodStart = new DateOnly(today.Year, 9, 1),
                 UsagePeriodEnd = new DateOnly(today.Year + 1, 12, 31)
+            });
+        }
+    }
+
+    public async Task EnsureDefaultRuleSettingsAsync()
+    {
+        var defaults = new (string Key, string Value)[]
+        {
+            (HolidayRuleSettingKeys.Weeks1To5HoursPerYear, JsonSerializer.Serialize(185m)),
+            (HolidayRuleSettingKeys.Week6HoursPerYear, JsonSerializer.Serialize(37m)),
+            (HolidayRuleSettingKeys.MainHolidayNoticeMonths, JsonSerializer.Serialize(3m)),
+            (HolidayRuleSettingKeys.OtherHolidayNoticeMonths, JsonSerializer.Serialize(1m))
+        };
+
+        foreach (var setting in defaults)
+        {
+            if (await this.SystemParameters.AnyAsync(x => x.Key == setting.Key))
+                continue;
+
+            await this.InsertAsync(new SystemParameter
+            {
+                Id = Guid.NewGuid(),
+                Key = setting.Key,
+                Value = setting.Value,
+                EffectiveFrom = HolidayRuleSettingKeys.DefaultsEffectiveFrom
+            });
+        }
+
+        if (!await this.RulePresets.AnyAsync())
+        {
+            var settings = new HolidayRuleSettingsDto();
+            await this.InsertAsync(new RulePreset
+            {
+                Id = Guid.NewGuid(),
+                Name = "Business Esbjerg defaults",
+                Settings = JsonSerializer.Serialize(settings, new JsonSerializerOptions(JsonSerializerDefaults.Web))
             });
         }
     }

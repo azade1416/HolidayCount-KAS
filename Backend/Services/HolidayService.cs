@@ -1,7 +1,9 @@
 using Backend.Data;
+using Backend.DTOs;
 using Backend.Models;
 using LinqToDB;
 using LinqToDB.Async;
+using System.Text.Json;
 
 namespace Backend.Services;
 
@@ -66,19 +68,115 @@ public class HolidayService : IHolidayService
         return (decimal.Round(hours, 2), days);
     }
 
+    public async Task EnsureAccrualsAsync(Guid userId, DateOnly throughDate)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(x => x.Id == userId)
+            ?? throw new KeyNotFoundException("Employee not found.");
+        var balances = await _db.HolidayBalances.Where(x => x.UserId == userId).ToListAsync();
+        foreach (var balance in balances)
+        {
+            var accrualStart = user.EmploymentStartDate > balance.EarningPeriodStart
+                ? user.EmploymentStartDate
+                : balance.EarningPeriodStart;
+            var lastDate = throughDate < balance.EarningPeriodEnd ? throughDate : balance.EarningPeriodEnd;
+            var month = new DateOnly(accrualStart.Year, accrualStart.Month, 1);
+            while (month <= lastDate)
+            {
+                var existing = await _db.MonthlyAccruals.FirstOrDefaultAsync(x =>
+                    x.HolidayBalanceId == balance.Id && x.AccrualMonth == month);
+                if (existing != null)
+                {
+                    month = month.AddMonths(1);
+                    continue;
+                }
+
+                var rate = await GetMonthlyAccrualDaysAsync(balance.AccountType, month);
+                var averageDayHours = await GetAverageScheduledDayHoursAsync(userId, month);
+                if (averageDayHours <= 0)
+                    throw new InvalidOperationException($"No working schedule exists for {month:yyyy-MM}.");
+
+                var earnedHours = decimal.Round(rate * averageDayHours, 2, MidpointRounding.AwayFromZero);
+                await using var transaction = await _db.BeginTransactionAsync();
+                await _db.InsertAsync(new MonthlyAccrual
+                {
+                    Id = Guid.NewGuid(),
+                    HolidayBalanceId = balance.Id,
+                    AccrualMonth = month,
+                    EarnedHours = earnedHours,
+                    AccrualRatePerMonth = rate,
+                    AverageDayHours = averageDayHours,
+                    CreatedAtUtc = DateTime.UtcNow
+                });
+                balance.EarnedHours += earnedHours;
+                await _db.UpdateAsync(balance);
+                await _db.InsertAsync(new HolidayTransaction
+                {
+                    Id = Guid.NewGuid(),
+                    HolidayBalanceId = balance.Id,
+                    TransactionType = HolidayTransactionType.Accrual,
+                    TransactionDate = month,
+                    Units = earnedHours,
+                    Notes = $"Monthly accrual: {rate:0.00} days at {averageDayHours:0.00} hours per workday."
+                });
+                await transaction.CommitAsync();
+                month = month.AddMonths(1);
+            }
+        }
+    }
+
+    public async Task<decimal> ProjectAccruedHoursAsync(Guid userId, HolidayBalance balance, DateOnly throughDate)
+    {
+        var earnedHours = balance.EarnedHours;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var user = await _db.Users.FirstOrDefaultAsync(x => x.Id == userId)
+            ?? throw new KeyNotFoundException("Employee not found.");
+        if (throughDate < user.EmploymentStartDate)
+            return earnedHours;
+
+        var month = new DateOnly(today.Year, today.Month, 1).AddMonths(1);
+        var accrualStart = user.EmploymentStartDate > balance.EarningPeriodStart
+            ? user.EmploymentStartDate
+            : balance.EarningPeriodStart;
+        var firstEligibleMonth = new DateOnly(accrualStart.Year, accrualStart.Month, 1);
+        if (month < firstEligibleMonth)
+            month = firstEligibleMonth;
+        var lastDate = throughDate < balance.EarningPeriodEnd ? throughDate : balance.EarningPeriodEnd;
+
+        while (month <= lastDate)
+        {
+            var existing = await _db.MonthlyAccruals.FirstOrDefaultAsync(x =>
+                x.HolidayBalanceId == balance.Id && x.AccrualMonth == month);
+            if (existing != null)
+            {
+                earnedHours += existing.EarnedHours;
+            }
+            else
+            {
+                var rate = await GetMonthlyAccrualDaysAsync(balance.AccountType, month);
+                var averageDayHours = await GetAverageScheduledDayHoursAsync(userId, month);
+                if (averageDayHours <= 0)
+                    throw new InvalidOperationException($"No working schedule exists for {month:yyyy-MM}.");
+                earnedHours += decimal.Round(rate * averageDayHours, 2, MidpointRounding.AwayFromZero);
+            }
+            month = month.AddMonths(1);
+        }
+
+        return earnedHours;
+    }
+
     public async Task<LeaveRequest> CreateHolidayAsync(Guid userId, Guid accountId, DateOnly startDate, DateOnly endDate)
     {
         if (startDate > endDate)
             throw new ArgumentException("StartDate must be before or equal to EndDate.");
 
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        await EnsureAccrualsAsync(userId, today);
+
         await using var transaction = await _db.BeginTransactionAsync();
         var employee = await _db.Users.FirstOrDefaultAsync(x => x.Id == userId);
         if (employee == null)
             throw new KeyNotFoundException("Employee not found.");
-
-        // Serialize balance checks for this employee so concurrent requests cannot overspend.
         await _db.UpdateAsync(employee);
-
         var balance = await _db.HolidayBalances.FirstOrDefaultAsync(x => x.Id == accountId && x.UserId == userId);
         if (balance == null)
             throw new KeyNotFoundException("Holiday account not found.");
@@ -107,11 +205,38 @@ public class HolidayService : IHolidayService
                 && account.UsagePeriodStart <= request.StartDate
                 && account.UsagePeriodEnd >= request.EndDate))
             .Sum(request => request.RequestedHours);
-        var availableHours = applicableBalances.Sum(account =>
-            account.EarnedHours - account.UsedHours - account.TransferredHours);
-        if (requestedHours + pendingHours > availableHours)
-            throw new InvalidOperationException(
-                "The holiday balance must be non-negative by the end of the earning period.");
+        var availableAcrossAccounts = applicableBalances.Sum(account =>
+            account.EarnedHours - account.UsedHours - account.TransferredHours) - pendingHours;
+        var weeklyHours = await GetWeeklyScheduleHoursAsync(userId, startDate);
+        if (weeklyHours <= 0)
+            throw new InvalidOperationException("No working schedule exists for the requested dates.");
+
+        if (requestedHours > availableAcrossAccounts + weeklyHours)
+            throw new InvalidOperationException("Maximum holiday debt is one week.");
+
+        foreach (var earningPeriodEnd in applicableBalances
+                     .Select(x => x.EarningPeriodEnd)
+                     .Where(x => x >= today)
+                     .Distinct())
+        {
+            var earningPeriodBalances = await _db.HolidayBalances
+                .Where(x => x.UserId == userId && x.EarningPeriodEnd == earningPeriodEnd)
+                .ToListAsync();
+            var projectedBalance = await GetProjectedBalanceAtEarningEndAsync(
+                userId, earningPeriodBalances, pendingRequests, earningPeriodEnd);
+            var requestedHoursByEarningEnd = await GetHoursThroughDateAsync(
+                userId,
+                new LeaveRequest
+                {
+                    StartDate = startDate,
+                    EndDate = endDate,
+                    RequestedHours = requestedHours
+                },
+                earningPeriodEnd);
+            if (projectedBalance - requestedHoursByEarningEnd < 0)
+                throw new InvalidOperationException(
+                    "The holiday balance must be non-negative on 31 August.");
+        }
 
         var request = new LeaveRequest
         {
@@ -130,6 +255,166 @@ public class HolidayService : IHolidayService
         await _db.InsertAsync(request);
         await transaction.CommitAsync();
         return request;
+    }
+
+    private async Task<decimal> GetProjectedBalanceAtEarningEndAsync(
+        Guid userId,
+        IReadOnlyCollection<HolidayBalance> balances,
+        IReadOnlyCollection<LeaveRequest> pendingRequests,
+        DateOnly earningPeriodEnd)
+    {
+        decimal projectedEarnedHours = 0;
+        decimal futureApprovedHours = 0;
+        decimal futureApprovedTransfers = 0;
+        decimal pendingHoursThroughEnd = 0;
+
+        foreach (var account in balances)
+        {
+            projectedEarnedHours += await ProjectAccruedHoursAsync(userId, account, earningPeriodEnd);
+
+            var approvedRequests = await _db.LeaveRequests
+                .Where(x => x.UserId == userId
+                    && x.AccountType == account.AccountType
+                    && x.Status == LeaveRequestStatus.Approved
+                    && (x.RequestType == LeaveRequestType.Holiday
+                        || x.RequestType == LeaveRequestType.Transfer)
+                    && account.UsagePeriodStart <= x.StartDate
+                    && account.UsagePeriodEnd >= x.EndDate)
+                .ToListAsync();
+            foreach (var request in approvedRequests.Where(x => x.StartDate > earningPeriodEnd))
+            {
+                if (request.RequestType == LeaveRequestType.Holiday)
+                    futureApprovedHours += request.RequestedHours;
+                else
+                    futureApprovedTransfers += request.RequestedHours;
+            }
+
+            foreach (var request in approvedRequests.Where(x =>
+                         x.StartDate <= earningPeriodEnd && x.EndDate > earningPeriodEnd))
+            {
+                var throughEnd = await GetHoursThroughDateAsync(userId, request, earningPeriodEnd);
+                var afterEnd = request.RequestedHours - throughEnd;
+                if (request.RequestType == LeaveRequestType.Holiday)
+                    futureApprovedHours += afterEnd;
+                else
+                    futureApprovedTransfers += afterEnd;
+            }
+
+            foreach (var request in pendingRequests.Where(x =>
+                         x.AccountType == account.AccountType
+                         && account.UsagePeriodStart <= x.StartDate
+                         && account.UsagePeriodEnd >= x.EndDate))
+            {
+                pendingHoursThroughEnd += await GetHoursThroughDateAsync(
+                    userId, request, earningPeriodEnd);
+            }
+        }
+
+        var usedThroughEnd = balances.Sum(x => x.UsedHours) - futureApprovedHours;
+        var transferredThroughEnd = balances.Sum(x => x.TransferredHours) - futureApprovedTransfers;
+        return projectedEarnedHours - usedThroughEnd - transferredThroughEnd - pendingHoursThroughEnd;
+    }
+
+    private async Task<decimal> GetHoursThroughDateAsync(
+        Guid userId,
+        LeaveRequest request,
+        DateOnly throughDate)
+    {
+        if (request.StartDate > throughDate)
+            return 0;
+        if (request.EndDate <= throughDate)
+            return request.RequestedHours;
+
+        return (await CalculateLeaveDurationAsync(
+            userId, request.StartDate, throughDate)).Hours;
+    }
+
+    private async Task<decimal> GetMonthlyAccrualDaysAsync(HolidayAccountType accountType, DateOnly effectiveDate)
+    {
+        var key = accountType == HolidayAccountType.Weeks1To5
+            ? HolidayRuleSettingKeys.Weeks1To5HoursPerYear
+            : HolidayRuleSettingKeys.Week6HoursPerYear;
+        var setting = await _db.SystemParameters
+            .Where(x => x.Key == key && x.EffectiveFrom <= effectiveDate)
+            .OrderByDescending(x => x.EffectiveFrom)
+            .FirstOrDefaultAsync();
+        var annualHours = accountType == HolidayAccountType.Weeks1To5 ? 185m : 37m;
+        if (setting != null)
+        {
+            using var value = JsonDocument.Parse(setting.Value);
+            annualHours = value.RootElement.ValueKind == JsonValueKind.Number
+                ? value.RootElement.GetDecimal()
+                : throw new InvalidOperationException($"System parameter '{key}' must have a numeric value.");
+        }
+
+        return annualHours / 7.4m / 12m;
+    }
+
+    private async Task<bool> GetBooleanRuleAsync(string key, DateOnly effectiveDate, bool fallback)
+    {
+        var setting = await _db.SystemParameters
+            .Where(x => x.Key == key && x.EffectiveFrom <= effectiveDate)
+            .OrderByDescending(x => x.EffectiveFrom)
+            .FirstOrDefaultAsync();
+        if (setting == null)
+            return fallback;
+
+        using var value = JsonDocument.Parse(setting.Value);
+        return value.RootElement.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => throw new InvalidOperationException($"System parameter '{key}' must have a boolean value.")
+        };
+    }
+
+    private async Task<decimal> GetAverageScheduledDayHoursAsync(Guid userId, DateOnly month)
+    {
+        var monthStart = month;
+        var monthEnd = month.AddMonths(1).AddDays(-1);
+        var schedules = await _db.WorkScheduleEntries
+            .Where(x => x.UserId == userId
+                && x.EffectiveFrom <= monthEnd
+                && (x.EffectiveTo == null || x.EffectiveTo >= monthStart))
+            .ToListAsync();
+
+        decimal totalHours = 0;
+        var scheduledWorkdays = 0;
+        for (var date = monthStart; date <= monthEnd; date = date.AddDays(1))
+        {
+            if (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+                continue;
+
+            var schedule = schedules
+                .Where(x => x.DayOfWeek == date.DayOfWeek
+                    && x.EffectiveFrom <= date
+                    && (x.EffectiveTo == null || x.EffectiveTo >= date))
+                .OrderByDescending(x => x.EffectiveFrom)
+                .FirstOrDefault();
+            if (schedule == null)
+                continue;
+
+            totalHours += (decimal)(schedule.EndTime - schedule.StartTime).TotalHours;
+            scheduledWorkdays++;
+        }
+
+        return scheduledWorkdays == 0
+            ? 0
+            : decimal.Round(totalHours / scheduledWorkdays, 2, MidpointRounding.AwayFromZero);
+    }
+
+    private async Task<decimal> GetWeeklyScheduleHoursAsync(Guid userId, DateOnly date)
+    {
+        var schedules = await _db.WorkScheduleEntries
+            .Where(x => x.UserId == userId
+                && x.EffectiveFrom <= date
+                && (x.EffectiveTo == null || x.EffectiveTo >= date))
+            .ToListAsync();
+
+        return schedules
+            .GroupBy(x => x.DayOfWeek)
+            .Select(group => group.OrderByDescending(x => x.EffectiveFrom).First())
+            .Sum(x => (decimal)(x.EndTime - x.StartTime).TotalHours);
     }
 
     public async Task<LeaveRequest> CreateCancellationAsync(Guid userId, Guid originalRequestId)
@@ -170,8 +455,16 @@ public class HolidayService : IHolidayService
 
     public async Task<LeaveRequest> CreateTransferAsync(Guid userId, Guid accountId, decimal hours)
     {
-        if (hours <= 0 || hours > 37)
-            throw new ArgumentException("Transfer is limited to at most 37.00 hours.");
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (!await GetBooleanRuleAsync(HolidayRuleSettingKeys.TransfersEnabled, today, true))
+            throw new InvalidOperationException("Holiday transfers are currently disabled.");
+
+        var averageDayHours = await GetAverageScheduledDayHoursAsync(userId, today);
+        if (averageDayHours <= 0)
+            throw new InvalidOperationException("No working schedule exists for this employee.");
+        var maximumTransferHours = decimal.Round(averageDayHours * 5, 2, MidpointRounding.AwayFromZero);
+        if (hours <= 0 || hours > maximumTransferHours)
+            throw new ArgumentException($"Transfer is limited to at most {maximumTransferHours:0.00} hours.");
 
         await using var transaction = await _db.BeginTransactionAsync();
         var employee = await _db.Users.FirstOrDefaultAsync(x => x.Id == userId);
